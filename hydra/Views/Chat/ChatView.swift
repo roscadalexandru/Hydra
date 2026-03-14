@@ -43,6 +43,7 @@ struct ChatView: View {
                     viewModel: sessionListViewModel,
                     onSelectSession: { session in
                         viewModel.loadSession(session)
+                        viewModel.projectId = session.projectId
                         selectedProjectId = session.projectId
                     },
                     onNewChat: {
@@ -94,6 +95,8 @@ struct ChatView: View {
             guard oldValue != newProjectId,
                   let session = viewModel.session,
                   session.projectId != newProjectId else { return }
+            viewModel.session?.projectId = newProjectId
+            viewModel.projectId = newProjectId
             Task {
                 try? await sessionListViewModel.updateSessionProject(session, projectId: newProjectId)
             }

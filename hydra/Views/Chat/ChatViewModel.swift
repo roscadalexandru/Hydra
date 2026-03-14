@@ -13,6 +13,7 @@ final class ChatViewModel {
     var inputText: String = ""
     var session: ChatSession?
     var errorMessage: String?
+    var projectId: Int64?
 
     private let database: AppDatabase
     private var bridge: ChatBridgeProtocol
@@ -68,7 +69,7 @@ final class ChatViewModel {
 
         // Create session if needed
         if session == nil {
-            var newSession = ChatSession(workspaceId: workspaceId)
+            var newSession = ChatSession(workspaceId: workspaceId, projectId: projectId)
             do {
                 try database.dbWriter.write { db in
                     try newSession.insert(db)
