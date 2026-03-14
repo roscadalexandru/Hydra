@@ -13,7 +13,7 @@ struct BoardView: View {
             kanbanBoard
         }
         .onAppear {
-            viewModel.ensureProject()
+            viewModel.ensureWorkspace()
         }
         .sheet(isPresented: $showingNewIssue) {
             newIssueSheet
@@ -36,7 +36,7 @@ struct BoardView: View {
 
     private var boardToolbar: some View {
         HStack {
-            Text("Project Board")
+            Text("Board")
                 .font(.headline)
             Spacer()
             Button {

@@ -36,7 +36,7 @@ struct KanbanColumnView: View {
             if let issue = issues.first(where: { $0.id == id }) {
                 onDrop(issue, status)
             } else {
-                let placeholder = Issue(id: id, projectId: 0, title: "")
+                let placeholder = Issue(id: id, workspaceId: 0, title: "")
                 onDrop(placeholder, status)
             }
             return true

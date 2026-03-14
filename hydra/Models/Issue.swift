@@ -5,7 +5,7 @@ struct Issue: Identifiable, Codable, Equatable, FetchableRecord, MutablePersista
     static let databaseTableName = "issues"
 
     var id: Int64?
-    var projectId: Int64
+    var workspaceId: Int64
     var epicId: Int64?
     var title: String
     var description: String
@@ -33,7 +33,7 @@ struct Issue: Identifiable, Codable, Equatable, FetchableRecord, MutablePersista
 
     enum Columns {
         static let id = Column(CodingKeys.id)
-        static let projectId = Column(CodingKeys.projectId)
+        static let workspaceId = Column(CodingKeys.workspaceId)
         static let epicId = Column(CodingKeys.epicId)
         static let title = Column(CodingKeys.title)
         static let status = Column(CodingKeys.status)
@@ -45,7 +45,7 @@ struct Issue: Identifiable, Codable, Equatable, FetchableRecord, MutablePersista
 
     init(
         id: Int64? = nil,
-        projectId: Int64,
+        workspaceId: Int64,
         epicId: Int64? = nil,
         title: String,
         description: String = "",
@@ -58,7 +58,7 @@ struct Issue: Identifiable, Codable, Equatable, FetchableRecord, MutablePersista
         updatedAt: Date = Date()
     ) {
         self.id = id
-        self.projectId = projectId
+        self.workspaceId = workspaceId
         self.epicId = epicId
         self.title = title
         self.description = description

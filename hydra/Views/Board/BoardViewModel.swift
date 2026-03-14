@@ -5,13 +5,11 @@ import Combine
 @Observable
 final class BoardViewModel {
     var issues: [Issue] = []
-    var project: Project?
+    var workspace: Workspace?
 
     private var cancellable: AnyCancellable?
 
-    init() {
-        observeIssues()
-    }
+    init() {}
 
     var columns: [Issue.Status] {
         Issue.Status.allCases
@@ -35,8 +33,8 @@ final class BoardViewModel {
     }
 
     func createIssue(title: String, priority: Issue.Priority = .medium) {
-        guard let projectId = project?.id else { return }
-        var issue = Issue(projectId: projectId, title: title, priority: priority)
+        guard let workspaceId = workspace?.id else { return }
+        var issue = Issue(workspaceId: workspaceId, title: title, priority: priority)
         do {
             try AppDatabase.shared.dbWriter.write { db in
                 try issue.insert(db)
@@ -66,25 +64,31 @@ final class BoardViewModel {
         }
     }
 
-    func ensureProject() {
+    func ensureWorkspace() {
         do {
             try AppDatabase.shared.dbWriter.write { db in
-                if let existing = try Project.fetchOne(db) {
-                    self.project = existing
+                if let existing = try Workspace.fetchOne(db) {
+                    self.workspace = existing
                 } else {
-                    var newProject = Project(name: "My Project")
-                    try newProject.insert(db)
-                    self.project = newProject
+                    var newWorkspace = Workspace(name: "My Workspace")
+                    try newWorkspace.insert(db)
+                    self.workspace = newWorkspace
                 }
             }
+            observeIssues()
         } catch {
-            print("Failed to ensure project: \(error)")
+            print("Failed to ensure workspace: \(error)")
         }
     }
 
     private func observeIssues() {
+        guard let workspaceId = workspace?.id else { return }
+
         let observation = ValueObservation.tracking { db in
-            try Issue.order(Column("createdAt").asc).fetchAll(db)
+            try Issue
+                .filter(Issue.Columns.workspaceId == workspaceId)
+                .order(Column("createdAt").asc)
+                .fetchAll(db)
         }
 
         cancellable = observation

@@ -17,7 +17,7 @@ struct AppDatabase {
         #endif
 
         migrator.registerMigration("v1") { db in
-            try db.create(table: "projects") { t in
+            try db.create(table: "workspaces") { t in
                 t.autoIncrementedPrimaryKey("id")
                 t.column("name", .text).notNull()
                 t.column("description", .text).notNull().defaults(to: "")
@@ -26,9 +26,9 @@ struct AppDatabase {
                 t.column("updatedAt", .datetime).notNull()
             }
 
-            try db.create(table: "repositories") { t in
+            try db.create(table: "projects") { t in
                 t.autoIncrementedPrimaryKey("id")
-                t.belongsTo("project", onDelete: .cascade).notNull()
+                t.belongsTo("workspace", onDelete: .cascade).notNull()
                 t.column("name", .text).notNull()
                 t.column("path", .text).notNull()
                 t.column("createdAt", .datetime).notNull()
@@ -36,7 +36,7 @@ struct AppDatabase {
 
             try db.create(table: "epics") { t in
                 t.autoIncrementedPrimaryKey("id")
-                t.belongsTo("project", onDelete: .cascade).notNull()
+                t.belongsTo("workspace", onDelete: .cascade).notNull()
                 t.column("title", .text).notNull()
                 t.column("description", .text).notNull().defaults(to: "")
                 t.column("createdAt", .datetime).notNull()
@@ -45,7 +45,7 @@ struct AppDatabase {
 
             try db.create(table: "issues") { t in
                 t.autoIncrementedPrimaryKey("id")
-                t.belongsTo("project", onDelete: .cascade).notNull()
+                t.belongsTo("workspace", onDelete: .cascade).notNull()
                 t.belongsTo("epic", onDelete: .setNull)
                 t.column("title", .text).notNull()
                 t.column("description", .text).notNull().defaults(to: "")
