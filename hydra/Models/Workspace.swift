@@ -8,6 +8,7 @@ struct Workspace: Identifiable, Codable, Equatable, FetchableRecord, MutablePers
     var name: String
     var description: String
     var defaultAutonomyMode: AutonomyMode
+    var lastOpenedAt: Date?
     var createdAt: Date
     var updatedAt: Date
 
@@ -22,6 +23,7 @@ struct Workspace: Identifiable, Codable, Equatable, FetchableRecord, MutablePers
         static let name = Column(CodingKeys.name)
         static let description = Column(CodingKeys.description)
         static let defaultAutonomyMode = Column(CodingKeys.defaultAutonomyMode)
+        static let lastOpenedAt = Column(CodingKeys.lastOpenedAt)
         static let createdAt = Column(CodingKeys.createdAt)
         static let updatedAt = Column(CodingKeys.updatedAt)
     }
@@ -31,6 +33,7 @@ struct Workspace: Identifiable, Codable, Equatable, FetchableRecord, MutablePers
         name: String,
         description: String = "",
         defaultAutonomyMode: AutonomyMode = .supervised,
+        lastOpenedAt: Date? = nil,
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
@@ -38,6 +41,7 @@ struct Workspace: Identifiable, Codable, Equatable, FetchableRecord, MutablePers
         self.name = name
         self.description = description
         self.defaultAutonomyMode = defaultAutonomyMode
+        self.lastOpenedAt = lastOpenedAt
         self.createdAt = createdAt
         self.updatedAt = updatedAt
     }

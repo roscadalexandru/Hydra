@@ -2,15 +2,17 @@ import SwiftUI
 import GRDB
 
 struct MainView: View {
+    let workspaceId: Int64
+
     var body: some View {
         HSplitView {
-            BoardPane()
+            BoardPane(workspaceId: workspaceId)
                 .frame(minWidth: 300, idealWidth: 400)
 
             ObservationPane()
                 .frame(minWidth: 250, idealWidth: 350)
 
-            RightPane()
+            RightPane(workspaceId: workspaceId)
                 .frame(minWidth: 300, idealWidth: 400)
         }
         .frame(minWidth: 1000, minHeight: 600)
@@ -20,8 +22,10 @@ struct MainView: View {
 // MARK: - Board Pane (Left)
 
 struct BoardPane: View {
+    let workspaceId: Int64
+
     var body: some View {
-        BoardView()
+        BoardView(workspaceId: workspaceId)
     }
 }
 
@@ -41,6 +45,8 @@ struct ObservationPane: View {
 // MARK: - Right Pane (Terminal + Chat)
 
 struct RightPane: View {
+    let workspaceId: Int64
+
     var body: some View {
         VSplitView {
             VStack(alignment: .leading, spacing: 0) {
@@ -51,7 +57,7 @@ struct RightPane: View {
             }
             .frame(minHeight: 200)
 
-            ChatPane()
+            ChatPane(workspaceId: workspaceId)
                 .frame(minHeight: 200)
         }
     }
@@ -60,21 +66,21 @@ struct RightPane: View {
 // MARK: - Chat Pane
 
 struct ChatPane: View {
-    @State private var workspace: Workspace?
+    let workspaceId: Int64
     @State private var workingDirectory: String?
     @State private var bridge: SidecarBridge?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header("Chat")
-            if let workspace, let workspaceId = workspace.id, let bridge {
+            if let bridge {
                 ChatView(
                     bridge: bridge,
                     workspaceId: workspaceId,
                     workingDirectory: workingDirectory ?? NSHomeDirectory()
                 )
             } else {
-                Text("No workspace loaded")
+                Text("Loading chat...")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -86,19 +92,15 @@ struct ChatPane: View {
 
     private func loadWorkspace() async {
         do {
-            let result = try await AppDatabase.shared.dbWriter.read { db -> (Workspace, String?)? in
-                guard let existing = try Workspace.fetchOne(db) else { return nil }
+            let dir = try await AppDatabase.shared.dbWriter.read { db -> String? in
                 let project = try Project
-                    .filter(Project.Columns.workspaceId == existing.id!)
+                    .filter(Project.Columns.workspaceId == workspaceId)
                     .fetchOne(db)
-                return (existing, project?.path)
+                return project?.path
             }
-            if let (ws, dir) = result {
-                workspace = ws
-                workingDirectory = dir
-                if bridge == nil {
-                    bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
-                }
+            workingDirectory = dir
+            if bridge == nil {
+                bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
             }
         } catch {
             print("Failed to load workspace: \(error)")
@@ -118,5 +120,5 @@ private func header(_ title: String) -> some View {
 }
 
 #Preview {
-    MainView()
+    MainView(workspaceId: 1)
 }

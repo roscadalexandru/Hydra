@@ -7,9 +7,10 @@ Swift + SwiftUI macOS app. Uses GRDB for SQLite persistence. Verify GRDB conform
 
 ## Architecture
 - `hydra/Models/` — GRDB models: Workspace → Project, Epic, Issue → AgentRun → AgentStep
-- `hydra/Database/` — `AppDatabase` with migrations (v1 core tables, v2 chat tables; pre-release)
+- `hydra/Database/` — `AppDatabase` with migrations (v1 core tables, v2 chat tables, v3 workspace lastOpenedAt; pre-release)
 - `hydra/Services/` — `SidecarProcess` (JSON-RPC child process), `SidecarBridge` (high-level async API), `SidecarProtocol` (types)
-- `hydra/Views/` — SwiftUI views. `Board/` has kanban board, `Chat/` has chat interface (ChatView, ChatViewModel, MessageListView, MessageBubbleView, ChatInputView)
+- `hydra/Views/` — SwiftUI views. `Board/` has kanban board, `Chat/` has chat interface, `WelcomeView` is the workspace launcher
+- Two-scene app: `Window("welcome")` singleton + `WindowGroup(for: Int64.self)` for workspace windows
 - Workspace is the top-level container; Project is a repo/directory within a workspace
 
 ## Git & Version Control
@@ -21,6 +22,7 @@ Swift + SwiftUI macOS app. Uses GRDB for SQLite persistence. Verify GRDB conform
 - Build: `xcodebuild -project hydra.xcodeproj -scheme hydra -destination 'platform=macOS' build`
 - Unit tests only: `xcodebuild test -project hydra.xcodeproj -scheme hydra -destination 'platform=macOS' -only-testing:hydraTests`
 - Tests use in-memory SQLite via `TestDatabase.make()` — no filesystem or app launch needed
+- For async ValueObservation tests, use `XCTNSPredicateExpectation` polling — not `asyncAfter` fixed delays
 
 ## Gotchas
 - Xcode `.pbxproj` can't be edited programmatically — new files must be added to targets manually by the user
@@ -32,6 +34,9 @@ Swift + SwiftUI macOS app. Uses GRDB for SQLite persistence. Verify GRDB conform
 - GRDB: use `dbWriter.read` for read-only queries, not `dbWriter.write` — `write` takes an exclusive lock unnecessarily
 - GRDB: in `@MainActor` test classes, `dbWriter.read`/`write` require `await`
 - `@MainActor` ViewModels should use `Task.detached` with async `dbWriter.write` for DB mutations to avoid blocking the main thread
+- Swift bug #87316: `@Observable` classes need `nonisolated deinit { }` or XCTest crashes with `-default-isolation MainActor`
+- Git worktrees don't copy `node_modules` — run `cd sidecar && npm install` in worktrees or SidecarProcessTests will crash
+- SwiftUI: `@Environment(\.dismiss)` is a no-op for top-level `Window` scenes — use `dismissWindow(id:)` instead
 
 ## Knowledge Base (Obsidian)
 Project notes live under `Hydra/` in the Obsidian vault. Use `mcp__mcp-obsidian__*` tools.

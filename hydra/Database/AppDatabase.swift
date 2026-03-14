@@ -118,6 +118,12 @@ struct AppDatabase {
             )
         }
 
+        migrator.registerMigration("v3") { db in
+            try db.alter(table: "workspaces") { t in
+                t.add(column: "lastOpenedAt", .datetime)
+            }
+        }
+
         return migrator
     }
 }

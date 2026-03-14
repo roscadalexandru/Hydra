@@ -1,19 +1,20 @@
 import SwiftUI
 
 struct BoardView: View {
-    @State private var viewModel = BoardViewModel()
+    @State private var viewModel: BoardViewModel
     @State private var showingNewIssue = false
     @State private var newIssueTitle = ""
     @State private var newIssuePriority: Issue.Priority = .medium
     @State private var selectedIssue: Issue?
 
+    init(workspaceId: Int64) {
+        self._viewModel = State(initialValue: BoardViewModel(workspaceId: workspaceId))
+    }
+
     var body: some View {
         VStack(spacing: 0) {
             boardToolbar
             kanbanBoard
-        }
-        .onAppear {
-            viewModel.ensureWorkspace()
         }
         .sheet(isPresented: $showingNewIssue) {
             newIssueSheet
