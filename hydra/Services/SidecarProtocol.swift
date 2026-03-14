@@ -3,7 +3,7 @@ import Foundation
 // MARK: - Permission Mode
 
 enum PermissionMode: String, Codable {
-    case `default` = "default"
+    case `default`
     case acceptEdits = "acceptEdits"
     case bypassPermissions = "bypassPermissions"
 }
@@ -177,13 +177,25 @@ enum AgentEvent: Decodable, Equatable {
 
 // MARK: - AnyCodableValue (for untyped JSON results)
 
-enum AnyCodableValue: Decodable, Equatable {
+enum AnyCodableValue: Codable, Equatable {
     case string(String)
     case number(Double)
     case bool(Bool)
     case dictionary([String: AnyCodableValue])
     case array([AnyCodableValue])
     case null
+
+    func encode(to encoder: Encoder) throws {
+        var container = encoder.singleValueContainer()
+        switch self {
+        case .string(let val): try container.encode(val)
+        case .number(let val): try container.encode(val)
+        case .bool(let val): try container.encode(val)
+        case .dictionary(let val): try container.encode(val)
+        case .array(let val): try container.encode(val)
+        case .null: try container.encodeNil()
+        }
+    }
 
     init(from decoder: Decoder) throws {
         let container = try decoder.singleValueContainer()

@@ -561,6 +561,46 @@ final class SidecarProtocolTests: XCTestCase {
         }
     }
 
+    // MARK: - AnyCodableValue encoding round-trip
+
+    func testAnyCodableValueEncodesString() throws {
+        let value = AnyCodableValue.string("hello")
+        let data = try JSONEncoder().encode(value)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        XCTAssertEqual(decoded, value)
+    }
+
+    func testAnyCodableValueEncodesNumber() throws {
+        let value = AnyCodableValue.number(3.14)
+        let data = try JSONEncoder().encode(value)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        XCTAssertEqual(decoded, value)
+    }
+
+    func testAnyCodableValueEncodesBool() throws {
+        let value = AnyCodableValue.bool(true)
+        let data = try JSONEncoder().encode(value)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        XCTAssertEqual(decoded, value)
+    }
+
+    func testAnyCodableValueEncodesNestedStructure() throws {
+        let value = AnyCodableValue.dictionary([
+            "names": .array([.string("a"), .string("b")]),
+            "count": .number(2)
+        ])
+        let data = try JSONEncoder().encode(value)
+        let decoded = try JSONDecoder().decode(AnyCodableValue.self, from: data)
+        XCTAssertEqual(decoded, value)
+    }
+
+    func testAnyCodableValueEncodesNull() throws {
+        let value = AnyCodableValue.null
+        let data = try JSONEncoder().encode(value)
+        let str = String(data: data, encoding: .utf8)!
+        XCTAssertEqual(str, "null")
+    }
+
     func testAgentEventFailsOnUnknownType() {
         let json = """
         {"type":"unknown_event","data":"foo"}
