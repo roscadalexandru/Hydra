@@ -20,7 +20,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(userMsg?.orderIndex, 0)
 
         // Verify persisted in DB
-        try await db.dbWriter.write { dbConn in
+        try await db.dbWriter.read { dbConn in
             let persisted = try ChatMessage.filter(ChatMessage.Columns.role == ChatMessage.Role.user.rawValue).fetchAll(dbConn)
             XCTAssertEqual(persisted.count, 1)
             XCTAssertEqual(persisted[0].content, "Hello agent")
@@ -74,7 +74,7 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertEqual(vm.streamingText, "")
 
         // Verify persisted
-        try await db.dbWriter.write { dbConn in
+        try await db.dbWriter.read { dbConn in
             let persisted = try ChatMessage.filter(ChatMessage.Columns.role == ChatMessage.Role.assistant.rawValue).fetchAll(dbConn)
             XCTAssertEqual(persisted.count, 1)
             XCTAssertEqual(persisted[0].content, "Hello world")
@@ -149,6 +149,7 @@ final class ChatViewModelTests: XCTestCase {
 
         try await waitUntil { mock.startSessionCalled }
         mock.emit(.sessionComplete(durationMs: 1500, costUsd: 0.05))
+        mock.finish()
 
         try await waitUntil { vm.session?.status == .completed }
 
@@ -164,6 +165,7 @@ final class ChatViewModelTests: XCTestCase {
 
         try await waitUntil { mock.startSessionCalled }
         mock.emit(.sessionError(error: "something broke"))
+        mock.finish()
 
         try await waitUntil { vm.session?.status == .failed }
         XCTAssertEqual(vm.errorMessage, "something broke")

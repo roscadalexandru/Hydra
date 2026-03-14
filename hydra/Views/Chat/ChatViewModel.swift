@@ -57,19 +57,17 @@ final class ChatViewModel {
         // Persist user message
         persistMessage(role: .user, content: text)
 
-        // Start streaming if not already active
-        if !isStreaming {
-            isStreaming = true
-            let stream = bridge.startSession(
-                prompt: text,
-                workingDirectory: workingDirectory,
-                systemPrompt: nil,
-                permissionMode: .default,
-                allowedTools: nil,
-                resumeSessionId: nil
-            )
-            consumeStream(stream)
-        }
+        // Start a new agent session (MVP: no multi-turn resume yet)
+        isStreaming = true
+        let stream = bridge.startSession(
+            prompt: text,
+            workingDirectory: workingDirectory,
+            systemPrompt: nil,
+            permissionMode: .default,
+            allowedTools: nil,
+            resumeSessionId: nil // MVP: each send() starts a fresh session
+        )
+        consumeStream(stream)
     }
 
     func cancelSession() {
@@ -118,13 +116,13 @@ final class ChatViewModel {
             session?.totalDurationMs = durationMs
             session?.totalCostUsd = costUsd
             updateSession()
-            finalizeStreaming()
+            // finalizeStreaming() called by consumeStream when the stream ends
 
         case .sessionError(let error):
             errorMessage = error
             session?.status = .failed
             updateSession()
-            finalizeStreaming()
+            // finalizeStreaming() called by consumeStream when the stream ends
         }
     }
 
