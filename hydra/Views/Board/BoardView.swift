@@ -13,7 +13,7 @@ struct BoardView: View {
             kanbanBoard
         }
         .onAppear {
-            viewModel.ensureProject()
+            viewModel.ensureWorkspace()
         }
         .sheet(isPresented: $showingNewIssue) {
             newIssueSheet

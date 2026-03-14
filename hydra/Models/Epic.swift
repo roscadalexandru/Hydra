@@ -5,7 +5,7 @@ struct Epic: Identifiable, Codable, Equatable, FetchableRecord, MutablePersistab
     static let databaseTableName = "epics"
 
     var id: Int64?
-    var projectId: Int64
+    var workspaceId: Int64
     var title: String
     var description: String
     var createdAt: Date
@@ -13,20 +13,20 @@ struct Epic: Identifiable, Codable, Equatable, FetchableRecord, MutablePersistab
 
     enum Columns {
         static let id = Column(CodingKeys.id)
-        static let projectId = Column(CodingKeys.projectId)
+        static let workspaceId = Column(CodingKeys.workspaceId)
         static let title = Column(CodingKeys.title)
     }
 
     init(
         id: Int64? = nil,
-        projectId: Int64,
+        workspaceId: Int64,
         title: String,
         description: String = "",
         createdAt: Date = Date(),
         updatedAt: Date = Date()
     ) {
         self.id = id
-        self.projectId = projectId
+        self.workspaceId = workspaceId
         self.title = title
         self.description = description
         self.createdAt = createdAt

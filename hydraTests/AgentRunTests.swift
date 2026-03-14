@@ -6,11 +6,11 @@ final class AgentRunTests: XCTestCase {
 
     private func makeIssueAndDB() throws -> (AppDatabase, hydra.Issue) {
         let db = try TestDatabase.make()
-        var project = Project(name: "Test")
+        var workspace = Workspace(name: "Test")
         try db.dbWriter.write { dbConn in
-            try project.insert(dbConn)
+            try workspace.insert(dbConn)
         }
-        var issue = hydra.Issue(projectId: project.id!, title: "Test task")
+        var issue = hydra.Issue(workspaceId: workspace.id!, title: "Test task")
         try db.dbWriter.write { dbConn in
             try issue.insert(dbConn)
         }

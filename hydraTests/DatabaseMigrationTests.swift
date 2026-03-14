@@ -12,8 +12,8 @@ final class DatabaseMigrationTests: XCTestCase {
                 ORDER BY name
             """)
 
+            XCTAssertTrue(tables.contains("workspaces"))
             XCTAssertTrue(tables.contains("projects"))
-            XCTAssertTrue(tables.contains("repositories"))
             XCTAssertTrue(tables.contains("epics"))
             XCTAssertTrue(tables.contains("issues"))
             XCTAssertTrue(tables.contains("agent_runs"))

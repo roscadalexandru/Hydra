@@ -4,64 +4,53 @@ import GRDB
 
 final class ProjectTests: XCTestCase {
 
-    func testCreateProject() throws {
+    private func makeWorkspaceAndDB() throws -> (AppDatabase, Workspace) {
         let db = try TestDatabase.make()
+        var workspace = Workspace(name: "Test")
         try db.dbWriter.write { dbConn in
-            var project = Project(name: "Test Project")
+            try workspace.insert(dbConn)
+        }
+        return (db, workspace)
+    }
+
+    func testCreateProject() throws {
+        let (db, workspace) = try makeWorkspaceAndDB()
+        try db.dbWriter.write { dbConn in
+            var project = Project(workspaceId: workspace.id!, name: "frontend", path: "/code/frontend")
             try project.insert(dbConn)
 
             XCTAssertNotNil(project.id)
-            XCTAssertEqual(project.name, "Test Project")
-            XCTAssertEqual(project.defaultAutonomyMode, .supervised)
+            XCTAssertEqual(project.name, "frontend")
+            XCTAssertEqual(project.path, "/code/frontend")
         }
     }
 
-    func testFetchProject() throws {
-        let db = try TestDatabase.make()
+    func testMultipleProjectsPerWorkspace() throws {
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var project = Project(name: "My App")
-            try project.insert(dbConn)
+            var project1 = Project(workspaceId: workspace.id!, name: "frontend", path: "/code/fe")
+            var project2 = Project(workspaceId: workspace.id!, name: "backend", path: "/code/be")
+            try project1.insert(dbConn)
+            try project2.insert(dbConn)
 
-            let fetched = try Project.fetchOne(dbConn, key: project.id)
-            XCTAssertNotNil(fetched)
-            XCTAssertEqual(fetched?.name, "My App")
+            let projects = try Project
+                .filter(Project.Columns.workspaceId == workspace.id!)
+                .fetchAll(dbConn)
+            XCTAssertEqual(projects.count, 2)
         }
     }
 
-    func testUpdateProject() throws {
-        let db = try TestDatabase.make()
+    func testCascadeDeleteWithWorkspace() throws {
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var project = Project(name: "Old Name")
+            var project = Project(workspaceId: workspace.id!, name: "api", path: "/code/api")
             try project.insert(dbConn)
+            let projectId = project.id
 
-            project.name = "New Name"
-            project.defaultAutonomyMode = .autonomous
-            try project.update(dbConn)
+            _ = try Workspace.deleteAll(dbConn)
 
-            let fetched = try Project.fetchOne(dbConn, key: project.id)
-            XCTAssertEqual(fetched?.name, "New Name")
-            XCTAssertEqual(fetched?.defaultAutonomyMode, .autonomous)
-        }
-    }
-
-    func testDeleteProject() throws {
-        let db = try TestDatabase.make()
-        try db.dbWriter.write { dbConn in
-            var project = Project(name: "To Delete")
-            try project.insert(dbConn)
-            let id = project.id
-
-            _ = try project.delete(dbConn)
-
-            let fetched = try Project.fetchOne(dbConn, key: id)
+            let fetched = try Project.fetchOne(dbConn, key: projectId)
             XCTAssertNil(fetched)
         }
-    }
-
-    func testProjectDefaults() throws {
-        let project = Project(name: "Defaults")
-        XCTAssertEqual(project.description, "")
-        XCTAssertEqual(project.defaultAutonomyMode, .supervised)
-        XCTAssertNil(project.id)
     }
 }

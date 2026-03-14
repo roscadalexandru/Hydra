@@ -5,40 +5,30 @@ struct Project: Identifiable, Codable, Equatable, FetchableRecord, MutablePersis
     static let databaseTableName = "projects"
 
     var id: Int64?
+    var workspaceId: Int64
     var name: String
-    var description: String
-    var defaultAutonomyMode: AutonomyMode
+    var path: String
     var createdAt: Date
-    var updatedAt: Date
-
-    enum AutonomyMode: String, Codable, CaseIterable {
-        case supervised
-        case autonomous
-        case chat
-    }
 
     enum Columns {
         static let id = Column(CodingKeys.id)
+        static let workspaceId = Column(CodingKeys.workspaceId)
         static let name = Column(CodingKeys.name)
-        static let defaultAutonomyMode = Column(CodingKeys.defaultAutonomyMode)
-        static let createdAt = Column(CodingKeys.createdAt)
-        static let updatedAt = Column(CodingKeys.updatedAt)
+        static let path = Column(CodingKeys.path)
     }
 
     init(
         id: Int64? = nil,
+        workspaceId: Int64,
         name: String,
-        description: String = "",
-        defaultAutonomyMode: AutonomyMode = .supervised,
-        createdAt: Date = Date(),
-        updatedAt: Date = Date()
+        path: String,
+        createdAt: Date = Date()
     ) {
         self.id = id
+        self.workspaceId = workspaceId
         self.name = name
-        self.description = description
-        self.defaultAutonomyMode = defaultAutonomyMode
+        self.path = path
         self.createdAt = createdAt
-        self.updatedAt = updatedAt
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {

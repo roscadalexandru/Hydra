@@ -4,19 +4,19 @@ import GRDB
 
 final class EpicTests: XCTestCase {
 
-    private func makeProjectAndDB() throws -> (AppDatabase, Project) {
+    private func makeWorkspaceAndDB() throws -> (AppDatabase, Workspace) {
         let db = try TestDatabase.make()
-        var project = Project(name: "Test")
+        var workspace = Workspace(name: "Test")
         try db.dbWriter.write { dbConn in
-            try project.insert(dbConn)
+            try workspace.insert(dbConn)
         }
-        return (db, project)
+        return (db, workspace)
     }
 
     func testCreateEpic() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var epic = Epic(projectId: project.id!, title: "Auth System")
+            var epic = Epic(workspaceId: workspace.id!, title: "Auth System")
             try epic.insert(dbConn)
 
             XCTAssertNotNil(epic.id)
@@ -25,12 +25,12 @@ final class EpicTests: XCTestCase {
     }
 
     func testLinkIssueToEpic() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var epic = Epic(projectId: project.id!, title: "Auth")
+            var epic = Epic(workspaceId: workspace.id!, title: "Auth")
             try epic.insert(dbConn)
 
-            var issue = hydra.Issue(projectId: project.id!, epicId: epic.id, title: "Login page")
+            var issue = hydra.Issue(workspaceId: workspace.id!, epicId: epic.id, title: "Login page")
             try issue.insert(dbConn)
 
             let fetched = try hydra.Issue.fetchOne(dbConn, key: issue.id)
@@ -39,12 +39,12 @@ final class EpicTests: XCTestCase {
     }
 
     func testDeleteEpicNullsIssueReference() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var epic = Epic(projectId: project.id!, title: "To Delete")
+            var epic = Epic(workspaceId: workspace.id!, title: "To Delete")
             try epic.insert(dbConn)
 
-            var issue = hydra.Issue(projectId: project.id!, epicId: epic.id, title: "Linked")
+            var issue = hydra.Issue(workspaceId: workspace.id!, epicId: epic.id, title: "Linked")
             try issue.insert(dbConn)
 
             _ = try epic.delete(dbConn)
@@ -55,14 +55,14 @@ final class EpicTests: XCTestCase {
         }
     }
 
-    func testCascadeDeleteWithProject() throws {
-        let (db, project) = try makeProjectAndDB()
+    func testCascadeDeleteWithWorkspace() throws {
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var epic = Epic(projectId: project.id!, title: "Orphan test")
+            var epic = Epic(workspaceId: workspace.id!, title: "Orphan test")
             try epic.insert(dbConn)
             let epicId = epic.id
 
-            _ = try Project.deleteAll(dbConn)
+            _ = try Workspace.deleteAll(dbConn)
 
             let fetched = try Epic.fetchOne(dbConn, key: epicId)
             XCTAssertNil(fetched)

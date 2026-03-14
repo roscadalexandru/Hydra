@@ -4,19 +4,19 @@ import GRDB
 
 final class IssueTests: XCTestCase {
 
-    private func makeProjectAndDB() throws -> (AppDatabase, Project) {
+    private func makeWorkspaceAndDB() throws -> (AppDatabase, Workspace) {
         let db = try TestDatabase.make()
-        var project = Project(name: "Test")
+        var workspace = Workspace(name: "Test")
         try db.dbWriter.write { dbConn in
-            try project.insert(dbConn)
+            try workspace.insert(dbConn)
         }
-        return (db, project)
+        return (db, workspace)
     }
 
     func testCreateIssue() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue = hydra.Issue(projectId: project.id!, title: "Fix login bug")
+            var issue = hydra.Issue(workspaceId: workspace.id!, title: "Fix login bug")
             try issue.insert(dbConn)
 
             XCTAssertNotNil(issue.id)
@@ -28,7 +28,7 @@ final class IssueTests: XCTestCase {
     }
 
     func testIssueDefaults() throws {
-        let issue = hydra.Issue(projectId: 1, title: "Test")
+        let issue = hydra.Issue(workspaceId: 1, title: "Test")
         XCTAssertEqual(issue.status, .backlog)
         XCTAssertEqual(issue.priority, .medium)
         XCTAssertEqual(issue.assigneeType, "human")
@@ -39,9 +39,9 @@ final class IssueTests: XCTestCase {
     }
 
     func testUpdateIssueStatus() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue = hydra.Issue(projectId: project.id!, title: "Task")
+            var issue = hydra.Issue(workspaceId: workspace.id!, title: "Task")
             try issue.insert(dbConn)
 
             issue.status = .inProgress
@@ -53,9 +53,9 @@ final class IssueTests: XCTestCase {
     }
 
     func testUpdateIssuePriority() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue = hydra.Issue(projectId: project.id!, title: "Urgent task", priority: .low)
+            var issue = hydra.Issue(workspaceId: workspace.id!, title: "Urgent task", priority: .low)
             try issue.insert(dbConn)
 
             issue.priority = .urgent
@@ -67,9 +67,9 @@ final class IssueTests: XCTestCase {
     }
 
     func testAssignIssueToAgent() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue = hydra.Issue(projectId: project.id!, title: "Agent task")
+            var issue = hydra.Issue(workspaceId: workspace.id!, title: "Agent task")
             try issue.insert(dbConn)
 
             issue.assigneeType = "agent"
@@ -81,17 +81,17 @@ final class IssueTests: XCTestCase {
     }
 
     func testIsAgentAssigned() throws {
-        let agentIssue = hydra.Issue(projectId: 1, title: "A", assigneeType: "agent")
+        let agentIssue = hydra.Issue(workspaceId: 1, title: "A", assigneeType: "agent")
         XCTAssertTrue(agentIssue.isAgentAssigned)
 
-        let humanIssue = hydra.Issue(projectId: 1, title: "B", assigneeType: "human")
+        let humanIssue = hydra.Issue(workspaceId: 1, title: "B", assigneeType: "human")
         XCTAssertFalse(humanIssue.isAgentAssigned)
     }
 
     func testDeleteIssue() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue = hydra.Issue(projectId: project.id!, title: "To delete")
+            var issue = hydra.Issue(workspaceId: workspace.id!, title: "To delete")
             try issue.insert(dbConn)
             let id = issue.id
 
@@ -103,11 +103,11 @@ final class IssueTests: XCTestCase {
     }
 
     func testFetchIssuesByStatus() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue1 = hydra.Issue(projectId: project.id!, title: "Backlog 1")
-            var issue2 = hydra.Issue(projectId: project.id!, title: "Backlog 2")
-            var issue3 = hydra.Issue(projectId: project.id!, title: "In Progress", status: .inProgress)
+            var issue1 = hydra.Issue(workspaceId: workspace.id!, title: "Backlog 1")
+            var issue2 = hydra.Issue(workspaceId: workspace.id!, title: "Backlog 2")
+            var issue3 = hydra.Issue(workspaceId: workspace.id!, title: "In Progress", status: .inProgress)
             try issue1.insert(dbConn)
             try issue2.insert(dbConn)
             try issue3.insert(dbConn)
@@ -125,9 +125,9 @@ final class IssueTests: XCTestCase {
     }
 
     func testIssueStatusTransitions() throws {
-        let (db, project) = try makeProjectAndDB()
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue = hydra.Issue(projectId: project.id!, title: "Flow test")
+            var issue = hydra.Issue(workspaceId: workspace.id!, title: "Flow test")
             try issue.insert(dbConn)
             XCTAssertEqual(issue.status, .backlog)
 
@@ -145,14 +145,14 @@ final class IssueTests: XCTestCase {
         }
     }
 
-    func testCascadeDeleteWithProject() throws {
-        let (db, project) = try makeProjectAndDB()
+    func testCascadeDeleteWithWorkspace() throws {
+        let (db, workspace) = try makeWorkspaceAndDB()
         try db.dbWriter.write { dbConn in
-            var issue = hydra.Issue(projectId: project.id!, title: "Orphan test")
+            var issue = hydra.Issue(workspaceId: workspace.id!, title: "Orphan test")
             try issue.insert(dbConn)
             let issueId = issue.id
 
-            _ = try Project.deleteAll(dbConn)
+            _ = try Workspace.deleteAll(dbConn)
 
             let fetched = try hydra.Issue.fetchOne(dbConn, key: issueId)
             XCTAssertNil(fetched)
