@@ -75,6 +75,7 @@ export function createHandler(queryFn, writeLine) {
 
         if (activeSession) {
           await activeSession.cancel();
+          activeSession = null;
         }
 
         writeLine(

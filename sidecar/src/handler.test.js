@@ -194,6 +194,46 @@ describe("handler", () => {
     assert.ok(closeCalled, "should have called close");
   });
 
+  it("send_message after cancel_session returns no active session error", async () => {
+    const queryFn = fakeQuery([makeInitMsg(), makeResultMsg()]);
+    const output = [];
+    const writeLine = (obj) => output.push(obj);
+    const handler = createHandler(queryFn, writeLine);
+
+    await handler({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "start_session",
+      params: {
+        sessionId: "hydra-1",
+        prompt: "Hello",
+        workingDirectory: "/tmp",
+        permissionMode: "default",
+      },
+    });
+
+    await handler({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "cancel_session",
+      params: { sessionId: "hydra-1" },
+    });
+
+    output.length = 0;
+
+    await handler({
+      jsonrpc: "2.0",
+      id: 3,
+      method: "send_message",
+      params: { sessionId: "hydra-1", message: "Follow up" },
+    });
+
+    const errResp = output.find((o) => o.id === 3);
+    assert.ok(errResp.error, "should return error after cancel");
+    assert.equal(errResp.error.code, -32602);
+    assert.match(errResp.error.message, /no active session/i);
+  });
+
   it("returns error for missing sessionId", async () => {
     const output = [];
     const writeLine = (obj) => output.push(obj);
