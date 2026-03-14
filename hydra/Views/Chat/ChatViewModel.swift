@@ -163,25 +163,35 @@ final class ChatViewModel {
             isError: isError
         )
         nextOrderIndex += 1
-        do {
-            try database.dbWriter.write { db in
-                try message.insert(db)
+        let db = database
+        Task.detached {
+            do {
+                try await db.dbWriter.write { dbConn in
+                    try message.insert(dbConn)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.errorMessage = "Failed to save message: \(error.localizedDescription)"
+                }
             }
-        } catch {
-            errorMessage = "Failed to save message: \(error.localizedDescription)"
         }
     }
 
     private func updateSession() {
         guard var s = session else { return }
         s.updatedAt = Date()
-        do {
-            try database.dbWriter.write { db in
-                try s.update(db)
+        session = s
+        let db = database
+        Task.detached {
+            do {
+                try await db.dbWriter.write { dbConn in
+                    try s.update(dbConn)
+                }
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.errorMessage = "Failed to update session: \(error.localizedDescription)"
+                }
             }
-            session = s
-        } catch {
-            errorMessage = "Failed to update session: \(error.localizedDescription)"
         }
     }
 
@@ -196,7 +206,7 @@ final class ChatViewModel {
                 .fetchAll(db)
         }
         cancellable = observation
-            .publisher(in: database.dbWriter, scheduling: .immediate)
+            .publisher(in: database.dbWriter, scheduling: .async(onQueue: .main))
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] messages in

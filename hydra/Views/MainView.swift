@@ -60,17 +60,21 @@ struct RightPane: View {
 // MARK: - Chat Pane
 
 struct ChatPane: View {
-    @State private var workspaceId: Int64?
+    @State private var workspace: Workspace?
+    @State private var workingDirectory: String?
+    @State private var bridge: SidecarBridge?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
             header("Chat")
-            if let workspaceId {
-                Text("Chat ready (workspace \(workspaceId))")
-                    .foregroundStyle(.secondary)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            if let workspace, let workspaceId = workspace.id, let bridge {
+                ChatView(
+                    bridge: bridge,
+                    workspaceId: workspaceId,
+                    workingDirectory: workingDirectory ?? NSHomeDirectory()
+                )
             } else {
-                Text("Loading...")
+                Text("No workspace loaded")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -82,10 +86,17 @@ struct ChatPane: View {
 
     private func loadWorkspace() {
         do {
-            try AppDatabase.shared.dbWriter.write { db in
+            try AppDatabase.shared.dbWriter.read { db in
                 if let existing = try Workspace.fetchOne(db) {
-                    workspaceId = existing.id
+                    workspace = existing
+                    let project = try Project
+                        .filter(Project.Columns.workspaceId == existing.id!)
+                        .fetchOne(db)
+                    workingDirectory = project?.path
                 }
+            }
+            if workspace != nil && bridge == nil {
+                bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
             }
         } catch {
             print("Failed to load workspace: \(error)")
