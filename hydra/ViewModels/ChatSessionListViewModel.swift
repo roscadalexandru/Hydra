@@ -72,6 +72,7 @@ final class ChatSessionListViewModel {
             }
         }.value
         sessions[index] = updated
+        sessions.sort { $0.updatedAt > $1.updatedAt }
     }
 
     func updateSessionProject(_ session: ChatSession, projectId: Int64?) async throws {
@@ -87,5 +88,6 @@ final class ChatSessionListViewModel {
             }
         }.value
         sessions[index] = updated
+        sessions.sort { $0.updatedAt > $1.updatedAt }
     }
 }

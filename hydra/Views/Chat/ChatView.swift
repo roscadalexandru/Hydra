@@ -95,6 +95,12 @@ struct ChatView: View {
                 sessionListViewModel.selectSession(session)
             }
         }
+        .onChange(of: sessionListViewModel.selectedSessionId) { _, newId in
+            if newId == nil {
+                viewModel.resetSession()
+                selectedProjectId = nil
+            }
+        }
         .onChange(of: selectedProjectId) { oldValue, newProjectId in
             guard oldValue != newProjectId,
                   let session = viewModel.session,
