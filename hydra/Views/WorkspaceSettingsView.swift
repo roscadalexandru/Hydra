@@ -14,7 +14,7 @@ struct WorkspaceSettingsView: View {
 
     init(workspaceId: Int64) {
         self.workspaceId = workspaceId
-        _viewModel = State(initialValue: WorkspaceSettingsViewModel(workspaceId: workspaceId))
+        self._viewModel = State(wrappedValue: WorkspaceSettingsViewModel(workspaceId: workspaceId))
     }
 
     var body: some View {
@@ -26,6 +26,10 @@ struct WorkspaceSettingsView: View {
                 .tabItem { Label("Projects", systemImage: "folder") }
         }
         .frame(width: 480, height: 360)
+        .onDisappear {
+            commitName()
+            commitDescription()
+        }
         .onChange(of: viewModel.workspace) { _, ws in
             guard let ws, !didLoadInitialValues else { return }
             editedName = ws.name
@@ -79,10 +83,6 @@ struct WorkspaceSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
-        .onDisappear {
-            commitName()
-            commitDescription()
-        }
     }
 
     private func commitName() {
