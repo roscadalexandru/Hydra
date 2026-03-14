@@ -2,7 +2,14 @@
 
 macOS native app (Swift + SwiftUI + GRDB). Autonomous AI dev agent with project management.
 
+## Languages & Frameworks
+Primary language is TypeScript. Secondary: Swift (macOS app with XCTest, not Swift Testing). When editing Swift, use XCTest framework and verify GRDB conformance patterns against actual API docs before applying.
+
+## Git & Version Control
+- When git worktree creation fails or any operation fails silently, immediately inform the user rather than falling back to an alternative approach without notice.
+
 ## Build & Test
+- always use `/test-driven-development` when doing implementation
 - Xcode project at `hydra.xcodeproj` (not inside a subfolder)
 - Build: `xcodebuild -project hydra.xcodeproj -scheme hydra -destination 'platform=macOS' build`
 - Unit tests only: `xcodebuild test -project hydra.xcodeproj -scheme hydra -destination 'platform=macOS' -only-testing:hydraTests`
