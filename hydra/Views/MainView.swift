@@ -1,4 +1,5 @@
 import SwiftUI
+import GRDB
 
 struct MainView: View {
     var body: some View {
@@ -50,13 +51,44 @@ struct RightPane: View {
             }
             .frame(minHeight: 200)
 
-            VStack(alignment: .leading, spacing: 0) {
-                header("Chat")
-                Text("Chat interface goes here")
+            ChatPane()
+                .frame(minHeight: 200)
+        }
+    }
+}
+
+// MARK: - Chat Pane
+
+struct ChatPane: View {
+    @State private var workspaceId: Int64?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header("Chat")
+            if let workspaceId {
+                Text("Chat ready (workspace \(workspaceId))")
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+            } else {
+                Text("Loading...")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(minHeight: 200)
+        }
+        .onAppear {
+            loadWorkspace()
+        }
+    }
+
+    private func loadWorkspace() {
+        do {
+            try AppDatabase.shared.dbWriter.write { db in
+                if let existing = try Workspace.fetchOne(db) {
+                    workspaceId = existing.id
+                }
+            }
+        } catch {
+            print("Failed to load workspace: \(error)")
         }
     }
 }

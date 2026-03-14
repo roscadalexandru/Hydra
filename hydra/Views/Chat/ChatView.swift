@@ -1,0 +1,31 @@
+import SwiftUI
+
+struct ChatView: View {
+    @State private var viewModel: ChatViewModel
+
+    init(bridge: ChatBridgeProtocol, workspaceId: Int64, workingDirectory: String) {
+        _viewModel = State(initialValue: ChatViewModel(
+            bridge: bridge,
+            workspaceId: workspaceId,
+            workingDirectory: workingDirectory
+        ))
+    }
+
+    var body: some View {
+        VStack(spacing: 0) {
+            MessageListView(
+                messages: viewModel.messages,
+                streamingText: viewModel.streamingText,
+                isStreaming: viewModel.isStreaming
+            )
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+            ChatInputView(
+                text: $viewModel.inputText,
+                isStreaming: viewModel.isStreaming,
+                onSend: { viewModel.send() },
+                onCancel: { viewModel.cancelSession() }
+            )
+        }
+    }
+}
