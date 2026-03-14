@@ -25,6 +25,7 @@ export function createHandler(queryFn, writeLine) {
     switch (cmd.method) {
       case "start_session": {
         if (!requireParam(cmd, "sessionId")) return;
+        if (!requireParam(cmd, "prompt")) return;
 
         const { sessionId, prompt, workingDirectory, permissionMode,
           systemPrompt, allowedTools, resumeSessionId } = cmd.params;
@@ -87,6 +88,13 @@ export function createHandler(queryFn, writeLine) {
 
       case "cancel_session": {
         if (!requireParam(cmd, "sessionId")) return;
+
+        if (activeSession && cmd.params.sessionId !== activeSessionId) {
+          writeLine(
+            formatError(cmd.id, -32602, `Session ID mismatch: expected ${activeSessionId}, got ${cmd.params.sessionId}`),
+          );
+          return;
+        }
 
         if (activeSession) {
           await activeSession.cancel();

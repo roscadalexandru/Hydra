@@ -11,6 +11,8 @@ function writeLine(obj) {
 
 const handleCommand = createHandler(createQueryFn(), writeLine);
 
+// Protocol assumes the Swift caller sends commands sequentially and waits
+// for each ack before sending the next. No command queue or mutex is used.
 rl.on("line", async (line) => {
   try {
     const cmd = parseCommand(line);

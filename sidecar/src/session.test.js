@@ -466,6 +466,44 @@ describe("Session", () => {
       assert.equal(errorEvents.length, 0, "cancel should not produce session_error");
     });
 
+    it("suppresses error when close() throws into the for-await loop", async () => {
+      let rejectBlock;
+
+      const queryFn = (_opts) => {
+        const gen = (async function* () {
+          yield makeInitMsg();
+          await new Promise((_resolve, reject) => { rejectBlock = reject; });
+        })();
+        gen.interrupt = async () => {};
+        gen.close = () => {
+          // Simulate the real SDK: close() causes the for-await to throw
+          rejectBlock(new Error("generator closed"));
+        };
+        return gen;
+      };
+
+      const session = new Session(queryFn);
+      const events = [];
+
+      const startPromise = session.start(
+        {
+          sessionId: "h-1",
+          prompt: "Long task",
+          workingDirectory: "/tmp",
+          permissionMode: "default",
+        },
+        (event) => events.push(event),
+      );
+
+      await new Promise(setImmediate);
+
+      await session.cancel();
+      await startPromise;
+
+      const errorEvents = events.filter((e) => e.type === "session_error");
+      assert.equal(errorEvents.length, 0, "cancel-induced throw should not produce session_error");
+    });
+
     it("is safe to call after session completes", async () => {
       const queryFn = fakeQuery([makeInitMsg()]);
       const session = new Session(queryFn);

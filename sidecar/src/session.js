@@ -54,7 +54,9 @@ export class Session {
         this.#translateMessage(msg, onEvent);
       }
     } catch (err) {
-      // If #query is null, cancel() was called — suppress the error
+      // If #query is null, cancel() was called — suppress the error.
+      // Note: if a real SDK error races with cancel(), it will also be
+      // suppressed. This is an acceptable trade-off for the narrow window.
       if (this.#query !== null) {
         onEvent({
           type: "session_error",
