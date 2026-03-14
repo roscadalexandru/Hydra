@@ -1,8 +1,10 @@
 import SwiftUI
 import GRDB
+import Combine
 
 struct MainView: View {
     let workspaceId: Int64
+    @State private var showingSettings = false
 
     var body: some View {
         HSplitView {
@@ -16,6 +18,19 @@ struct MainView: View {
                 .frame(minWidth: 300, idealWidth: 400)
         }
         .frame(minWidth: 1000, minHeight: 600)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gear")
+                }
+                .help("Workspace Settings")
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            WorkspaceSettingsView(workspaceId: workspaceId)
+        }
     }
 }
 
@@ -69,6 +84,7 @@ struct ChatPane: View {
     let workspaceId: Int64
     @State private var workingDirectory: String?
     @State private var bridge: SidecarBridge?
+    @State private var projectCancellable: AnyCancellable?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -86,25 +102,30 @@ struct ChatPane: View {
             }
         }
         .task {
-            await loadWorkspace()
-        }
-    }
-
-    private func loadWorkspace() async {
-        do {
-            let dir = try await AppDatabase.shared.dbWriter.read { db -> String? in
-                let project = try Project
-                    .filter(Project.Columns.workspaceId == workspaceId)
-                    .fetchOne(db)
-                return project?.path
-            }
-            workingDirectory = dir
+            observeFirstProject()
             if bridge == nil {
                 bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
             }
-        } catch {
-            print("Failed to load workspace: \(error)")
         }
+    }
+
+    private func observeFirstProject() {
+        let observation = ValueObservation.tracking { db -> String? in
+            let project = try Project
+                .filter(Project.Columns.workspaceId == workspaceId)
+                .order(Project.Columns.name)
+                .fetchOne(db)
+            return project?.path
+        }
+
+        projectCancellable = observation
+            .publisher(in: AppDatabase.shared.dbWriter, scheduling: .async(onQueue: .main))
+            .sink(
+                receiveCompletion: { _ in },
+                receiveValue: { [self] dir in
+                    workingDirectory = dir
+                }
+            )
     }
 }
 
