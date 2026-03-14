@@ -164,7 +164,9 @@ final class SidecarProcess: @unchecked Sendable {
                     let message = try decoder.decode(SidecarMessage.self, from: Data(lineData))
                     continuation?.yield(message)
                 } catch {
-                    // Skip malformed lines
+                    #if DEBUG
+                    NSLog("[SidecarProcess] Failed to decode line: %@\nRaw: %@", error.localizedDescription, String(data: Data(lineData), encoding: .utf8) ?? "<non-UTF8>")
+                    #endif
                 }
             }
         }
