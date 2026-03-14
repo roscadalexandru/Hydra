@@ -30,43 +30,55 @@ final class BoardViewModel {
         guard var updated = issues.first(where: { $0.id == issue.id }) else { return }
         updated.status = status
         updated.updatedAt = Date()
-        do {
-            try database.dbWriter.write { db in
-                try updated.update(db)
+        let database = self.database
+        Task.detached {
+            do {
+                try await database.dbWriter.write { db in
+                    try updated.update(db)
+                }
+            } catch {
+                print("Failed to move issue: \(error)")
             }
-        } catch {
-            print("Failed to move issue: \(error)")
         }
     }
 
     func createIssue(title: String, priority: Issue.Priority = .medium) {
         var issue = Issue(workspaceId: workspaceId, title: title, priority: priority)
-        do {
-            try database.dbWriter.write { db in
-                try issue.insert(db)
+        let database = self.database
+        Task.detached {
+            do {
+                try await database.dbWriter.write { db in
+                    try issue.insert(db)
+                }
+            } catch {
+                print("Failed to create issue: \(error)")
             }
-        } catch {
-            print("Failed to create issue: \(error)")
         }
     }
 
     func updateIssue(_ issue: Issue) {
-        do {
-            try database.dbWriter.write { db in
-                try issue.update(db)
+        let database = self.database
+        Task.detached {
+            do {
+                try await database.dbWriter.write { db in
+                    try issue.update(db)
+                }
+            } catch {
+                print("Failed to update issue: \(error)")
             }
-        } catch {
-            print("Failed to update issue: \(error)")
         }
     }
 
     func deleteIssue(_ issue: Issue) {
-        do {
-            try database.dbWriter.write { db in
-                _ = try issue.delete(db)
+        let database = self.database
+        Task.detached {
+            do {
+                try await database.dbWriter.write { db in
+                    _ = try issue.delete(db)
+                }
+            } catch {
+                print("Failed to delete issue: \(error)")
             }
-        } catch {
-            print("Failed to delete issue: \(error)")
         }
     }
 

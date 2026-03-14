@@ -5,6 +5,7 @@ import Combine
 @Observable
 final class WelcomeViewModel {
     var workspaces: [Workspace] = []
+    var lastCreatedWorkspaceId: Int64?
 
     private let database: AppDatabase
     private var cancellable: AnyCancellable?
@@ -16,39 +17,49 @@ final class WelcomeViewModel {
         observeWorkspaces()
     }
 
-    func createWorkspace(name: String) -> Int64? {
-        var workspace = Workspace(name: name)
-        do {
-            try database.dbWriter.write { db in
-                try workspace.insert(db)
+    func createWorkspace(name: String) {
+        let database = self.database
+        Task.detached { [weak self] in
+            do {
+                var workspace = Workspace(name: name)
+                try await database.dbWriter.write { db in
+                    try workspace.insert(db)
+                }
+                await MainActor.run {
+                    self?.lastCreatedWorkspaceId = workspace.id
+                }
+            } catch {
+                print("Failed to create workspace: \(error)")
             }
-            return workspace.id
-        } catch {
-            print("Failed to create workspace: \(error)")
-            return nil
         }
     }
 
     func updateLastOpened(_ workspaceId: Int64) {
-        do {
-            try database.dbWriter.write { db in
-                if var workspace = try Workspace.fetchOne(db, key: workspaceId) {
-                    workspace.lastOpenedAt = Date()
-                    try workspace.update(db)
+        let database = self.database
+        Task.detached {
+            do {
+                try await database.dbWriter.write { db in
+                    if var workspace = try Workspace.fetchOne(db, key: workspaceId) {
+                        workspace.lastOpenedAt = Date()
+                        try workspace.update(db)
+                    }
                 }
+            } catch {
+                print("Failed to update lastOpenedAt: \(error)")
             }
-        } catch {
-            print("Failed to update lastOpenedAt: \(error)")
         }
     }
 
     func deleteWorkspace(_ workspaceId: Int64) {
-        do {
-            _ = try database.dbWriter.write { db in
-                try Workspace.deleteOne(db, key: workspaceId)
+        let database = self.database
+        Task.detached {
+            do {
+                _ = try await database.dbWriter.write { db in
+                    try Workspace.deleteOne(db, key: workspaceId)
+                }
+            } catch {
+                print("Failed to delete workspace: \(error)")
             }
-        } catch {
-            print("Failed to delete workspace: \(error)")
         }
     }
 
@@ -88,6 +99,14 @@ struct WelcomeView: View {
         }
         .sheet(isPresented: $showingCreate) {
             createSheet
+        }
+        .onChange(of: viewModel.lastCreatedWorkspaceId) { _, newId in
+            if let id = newId {
+                viewModel.lastCreatedWorkspaceId = nil
+                newWorkspaceName = ""
+                showingCreate = false
+                openWorkspace(id)
+            }
         }
         .alert(
             "Delete Workspace",
@@ -167,11 +186,7 @@ struct WelcomeView: View {
                 Spacer()
                 Button("Create") {
                     if !newWorkspaceName.isEmpty {
-                        if let id = viewModel.createWorkspace(name: newWorkspaceName) {
-                            newWorkspaceName = ""
-                            showingCreate = false
-                            openWorkspace(id)
-                        }
+                        viewModel.createWorkspace(name: newWorkspaceName)
                     }
                 }
                 .keyboardShortcut(.defaultAction)
@@ -199,7 +214,7 @@ private struct WorkspaceRow: View {
             Text(workspace.name)
                 .font(.headline)
             if let lastOpened = workspace.lastOpenedAt {
-                Text("Last opened \(lastOpened, style: .relative) ago")
+                Text("Last opened \(lastOpened, style: .relative)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
             } else {

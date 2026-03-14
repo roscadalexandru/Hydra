@@ -47,18 +47,20 @@ final class WelcomeViewModelTests: XCTestCase {
         XCTAssertEqual(vm.workspaces[2].name, "Never Opened")
     }
 
-    func testCreateWorkspaceReturnsId() throws {
+    func testCreateWorkspaceSetsLastCreatedId() throws {
         let db = try TestDatabase.make()
         let vm = WelcomeViewModel(database: db)
 
-        let id = vm.createWorkspace(name: "New Project")
+        vm.createWorkspace(name: "New Project")
 
-        XCTAssertNotNil(id)
+        // Wait for the async write to complete and observation to deliver
+        let pred = NSPredicate { _, _ in vm.workspaces.count == 1 }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
-        let count = try db.dbWriter.read { dbConn in
-            try Workspace.fetchCount(dbConn)
-        }
-        XCTAssertEqual(count, 1)
+        XCTAssertEqual(vm.workspaces.count, 1)
+        XCTAssertEqual(vm.workspaces.first?.name, "New Project")
+        XCTAssertNotNil(vm.lastCreatedWorkspaceId)
     }
 
     func testUpdateLastOpened() throws {
@@ -72,6 +74,16 @@ final class WelcomeViewModelTests: XCTestCase {
         let workspaceId = try XCTUnwrap(workspace.id)
         let vm = WelcomeViewModel(database: db)
         vm.updateLastOpened(workspaceId)
+
+        // Wait for async write to complete
+        let pred = NSPredicate { _, _ in
+            let fetched = try? db.dbWriter.read { dbConn in
+                try Workspace.fetchOne(dbConn, key: workspaceId)
+            }
+            return fetched?.lastOpenedAt != nil
+        }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
         let fetched = try db.dbWriter.read { dbConn in
             try Workspace.fetchOne(dbConn, key: workspace.id)
@@ -89,6 +101,11 @@ final class WelcomeViewModelTests: XCTestCase {
         let workspaceId = try XCTUnwrap(workspace.id)
         let vm = WelcomeViewModel(database: db)
         vm.deleteWorkspace(workspaceId)
+
+        // Wait for async write to complete via observation
+        let pred = NSPredicate { _, _ in vm.workspaces.isEmpty }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
         let count = try db.dbWriter.read { dbConn in
             try Workspace.fetchCount(dbConn)
