@@ -64,4 +64,43 @@ final class WorkspaceTests: XCTestCase {
         XCTAssertEqual(workspace.defaultAutonomyMode, .supervised)
         XCTAssertNil(workspace.id)
     }
+
+    func testLastOpenedAtDefaultsToNil() throws {
+        let workspace = Workspace(name: "Fresh")
+        XCTAssertNil(workspace.lastOpenedAt)
+    }
+
+    func testLastOpenedAtPersistsRoundTrip() throws {
+        let db = try TestDatabase.make()
+        let now = Date()
+        try db.dbWriter.write { dbConn in
+            var workspace = Workspace(name: "Recent", lastOpenedAt: now)
+            try workspace.insert(dbConn)
+
+            let fetched = try Workspace.fetchOne(dbConn, key: workspace.id)
+            XCTAssertNotNil(fetched?.lastOpenedAt)
+            XCTAssertEqual(
+                fetched!.lastOpenedAt!.timeIntervalSinceReferenceDate,
+                now.timeIntervalSinceReferenceDate,
+                accuracy: 1.0
+            )
+        }
+    }
+
+    func testLastOpenedAtCanBeUpdated() throws {
+        let db = try TestDatabase.make()
+        try db.dbWriter.write { dbConn in
+            var workspace = Workspace(name: "Update Me")
+            try workspace.insert(dbConn)
+
+            XCTAssertNil(workspace.lastOpenedAt)
+
+            let now = Date()
+            workspace.lastOpenedAt = now
+            try workspace.update(dbConn)
+
+            let fetched = try Workspace.fetchOne(dbConn, key: workspace.id)
+            XCTAssertNotNil(fetched?.lastOpenedAt)
+        }
+    }
 }

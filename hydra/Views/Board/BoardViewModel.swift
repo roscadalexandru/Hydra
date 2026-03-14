@@ -5,11 +5,18 @@ import Combine
 @Observable
 final class BoardViewModel {
     var issues: [Issue] = []
-    var workspace: Workspace?
 
+    let workspaceId: Int64
+    private let database: AppDatabase
     private var cancellable: AnyCancellable?
 
-    init() {}
+    nonisolated deinit { }
+
+    init(workspaceId: Int64, database: AppDatabase = .shared) {
+        self.workspaceId = workspaceId
+        self.database = database
+        observeIssues()
+    }
 
     var columns: [Issue.Status] {
         Issue.Status.allCases
@@ -24,7 +31,7 @@ final class BoardViewModel {
         updated.status = status
         updated.updatedAt = Date()
         do {
-            try AppDatabase.shared.dbWriter.write { db in
+            try database.dbWriter.write { db in
                 try updated.update(db)
             }
         } catch {
@@ -33,10 +40,9 @@ final class BoardViewModel {
     }
 
     func createIssue(title: String, priority: Issue.Priority = .medium) {
-        guard let workspaceId = workspace?.id else { return }
         var issue = Issue(workspaceId: workspaceId, title: title, priority: priority)
         do {
-            try AppDatabase.shared.dbWriter.write { db in
+            try database.dbWriter.write { db in
                 try issue.insert(db)
             }
         } catch {
@@ -46,7 +52,7 @@ final class BoardViewModel {
 
     func updateIssue(_ issue: Issue) {
         do {
-            try AppDatabase.shared.dbWriter.write { db in
+            try database.dbWriter.write { db in
                 try issue.update(db)
             }
         } catch {
@@ -56,7 +62,7 @@ final class BoardViewModel {
 
     func deleteIssue(_ issue: Issue) {
         do {
-            try AppDatabase.shared.dbWriter.write { db in
+            try database.dbWriter.write { db in
                 _ = try issue.delete(db)
             }
         } catch {
@@ -64,25 +70,8 @@ final class BoardViewModel {
         }
     }
 
-    func ensureWorkspace() {
-        do {
-            try AppDatabase.shared.dbWriter.write { db in
-                if let existing = try Workspace.fetchOne(db) {
-                    self.workspace = existing
-                } else {
-                    var newWorkspace = Workspace(name: "My Workspace")
-                    try newWorkspace.insert(db)
-                    self.workspace = newWorkspace
-                }
-            }
-            observeIssues()
-        } catch {
-            print("Failed to ensure workspace: \(error)")
-        }
-    }
-
     private func observeIssues() {
-        guard let workspaceId = workspace?.id else { return }
+        let workspaceId = self.workspaceId
 
         let observation = ValueObservation.tracking { db in
             try Issue
@@ -92,7 +81,7 @@ final class BoardViewModel {
         }
 
         cancellable = observation
-            .publisher(in: AppDatabase.shared.dbWriter, scheduling: .immediate)
+            .publisher(in: database.dbWriter, scheduling: .async(onQueue: .main))
             .sink(
                 receiveCompletion: { _ in },
                 receiveValue: { [weak self] issues in

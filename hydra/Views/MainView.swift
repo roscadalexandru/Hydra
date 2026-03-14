@@ -1,9 +1,11 @@
 import SwiftUI
 
 struct MainView: View {
+    let workspaceId: Int64
+
     var body: some View {
         HSplitView {
-            BoardPane()
+            BoardPane(workspaceId: workspaceId)
                 .frame(minWidth: 300, idealWidth: 400)
 
             ObservationPane()
@@ -19,8 +21,10 @@ struct MainView: View {
 // MARK: - Board Pane (Left)
 
 struct BoardPane: View {
+    let workspaceId: Int64
+
     var body: some View {
-        BoardView()
+        BoardView(workspaceId: workspaceId)
     }
 }
 
@@ -73,5 +77,5 @@ private func header(_ title: String) -> some View {
 }
 
 #Preview {
-    MainView()
+    MainView(workspaceId: 1)
 }
