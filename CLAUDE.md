@@ -7,9 +7,9 @@ Swift + SwiftUI macOS app. Uses GRDB for SQLite persistence. Verify GRDB conform
 
 ## Architecture
 - `hydra/Models/` — GRDB models: Workspace → Project, Epic, Issue → AgentRun → AgentStep
-- `hydra/Database/` — `AppDatabase` with migrations (single v1 migration, pre-release)
+- `hydra/Database/` — `AppDatabase` with migrations (v1 core tables, v2 chat tables; pre-release)
 - `hydra/Services/` — `SidecarProcess` (JSON-RPC child process), `SidecarBridge` (high-level async API), `SidecarProtocol` (types)
-- `hydra/Views/` — SwiftUI views. `Board/` has kanban board (BoardView, BoardViewModel, KanbanColumnView, IssueCardView, IssueDetailView)
+- `hydra/Views/` — SwiftUI views. `Board/` has kanban board, `Chat/` has chat interface (ChatView, ChatViewModel, MessageListView, MessageBubbleView, ChatInputView)
 - Workspace is the top-level container; Project is a repo/directory within a workspace
 
 ## Git & Version Control
@@ -25,9 +25,13 @@ Swift + SwiftUI macOS app. Uses GRDB for SQLite persistence. Verify GRDB conform
 ## Gotchas
 - Xcode `.pbxproj` can't be edited programmatically — new files must be added to targets manually by the user
 - GRDB: put all protocol conformances (`Codable, FetchableRecord, MutablePersistableRecord`) on the struct declaration, not in extensions — otherwise "circular reference" errors
-- GRDB `belongsTo("x")` looks for a table literally named `x` — use `.references("actual_table")` for snake_case table names
+- GRDB `belongsTo("x")` auto-pluralizes to find table `xs` — use explicit `.column().references("table")` for non-standard names like `chatSessionId` → `chat_sessions`
 - `Issue` conflicts with `Testing.Issue` — use `hydra.Issue` in test files
 - Use XCTest (not Swift Testing `import Testing`) for test files
+- GRDB: `@MainActor` ViewModels must use `scheduling: .async(onQueue: .main)` for ValueObservation publishers — `.immediate` delivers on background thread causing data races
+- GRDB: use `dbWriter.read` for read-only queries, not `dbWriter.write` — `write` takes an exclusive lock unnecessarily
+- GRDB: in `@MainActor` test classes, `dbWriter.read`/`write` require `await`
+- `@MainActor` ViewModels should use `Task.detached` with async `dbWriter.write` for DB mutations to avoid blocking the main thread
 
 ## Knowledge Base (Obsidian)
 Project notes live under `Hydra/` in the Obsidian vault. Use `mcp__mcp-obsidian__*` tools.
