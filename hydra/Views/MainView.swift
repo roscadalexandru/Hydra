@@ -79,24 +79,26 @@ struct ChatPane: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
         }
-        .onAppear {
-            loadWorkspace()
+        .task {
+            await loadWorkspace()
         }
     }
 
-    private func loadWorkspace() {
+    private func loadWorkspace() async {
         do {
-            try AppDatabase.shared.dbWriter.read { db in
-                if let existing = try Workspace.fetchOne(db) {
-                    workspace = existing
-                    let project = try Project
-                        .filter(Project.Columns.workspaceId == existing.id!)
-                        .fetchOne(db)
-                    workingDirectory = project?.path
-                }
+            let result = try await AppDatabase.shared.dbWriter.read { db -> (Workspace, String?)? in
+                guard let existing = try Workspace.fetchOne(db) else { return nil }
+                let project = try Project
+                    .filter(Project.Columns.workspaceId == existing.id!)
+                    .fetchOne(db)
+                return (existing, project?.path)
             }
-            if workspace != nil && bridge == nil {
-                bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
+            if let (ws, dir) = result {
+                workspace = ws
+                workingDirectory = dir
+                if bridge == nil {
+                    bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
+                }
             }
         } catch {
             print("Failed to load workspace: \(error)")

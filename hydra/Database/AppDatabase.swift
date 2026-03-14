@@ -110,6 +110,12 @@ struct AppDatabase {
                 t.column("isError", .boolean).notNull().defaults(to: false)
                 t.column("createdAt", .datetime).notNull()
             }
+
+            try db.create(
+                index: "chat_messages_on_session_order",
+                on: "chat_messages",
+                columns: ["chatSessionId", "orderIndex"]
+            )
         }
 
         return migrator

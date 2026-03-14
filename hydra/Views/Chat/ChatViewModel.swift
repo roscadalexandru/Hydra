@@ -36,7 +36,7 @@ final class ChatViewModel {
 
     func send() {
         let text = inputText.trimmingCharacters(in: .whitespaces)
-        guard !text.isEmpty else { return }
+        guard !text.isEmpty, !isStreaming else { return }
         inputText = ""
 
         // Create session if needed
@@ -221,6 +221,7 @@ final class ChatViewModel {
         let encoder = JSONEncoder()
         guard let data = try? encoder.encode(value),
               let str = String(data: data, encoding: .utf8) else {
+            assertionFailure("Failed to encode AnyCodableValue")
             return ""
         }
         return str
