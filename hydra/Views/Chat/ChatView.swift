@@ -90,6 +90,10 @@ struct ChatView: View {
         .task {
             try? await sessionListViewModel.loadSessions()
             await loadProjects()
+            viewModel.onSessionCreated = { session in
+                sessionListViewModel.sessions.insert(session, at: 0)
+                sessionListViewModel.selectSession(session)
+            }
         }
         .onChange(of: selectedProjectId) { oldValue, newProjectId in
             guard oldValue != newProjectId,

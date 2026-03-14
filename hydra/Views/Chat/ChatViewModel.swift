@@ -15,6 +15,8 @@ final class ChatViewModel {
     var errorMessage: String?
     var projectId: Int64?
 
+    var onSessionCreated: ((ChatSession) -> Void)?
+
     private let database: AppDatabase
     private var bridge: ChatBridgeProtocol
     private let workspaceId: Int64
@@ -76,6 +78,7 @@ final class ChatViewModel {
                 }
                 session = newSession
                 observeMessages()
+                onSessionCreated?(newSession)
             } catch {
                 errorMessage = "Failed to create session: \(error.localizedDescription)"
                 return
