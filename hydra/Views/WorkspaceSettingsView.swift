@@ -38,6 +38,19 @@ struct WorkspaceSettingsView: View {
             didLoadInitialValues = true
         }
         .alert(
+            "Error",
+            isPresented: Binding(
+                get: { viewModel.errorMessage != nil },
+                set: { if !$0 { viewModel.errorMessage = nil } }
+            )
+        ) {
+            Button("OK") { viewModel.errorMessage = nil }
+        } message: {
+            if let msg = viewModel.errorMessage {
+                Text(msg)
+            }
+        }
+        .alert(
             "Remove Project",
             isPresented: Binding(
                 get: { projectToRemove != nil },
@@ -86,7 +99,8 @@ struct WorkspaceSettingsView: View {
     }
 
     private func commitName() {
-        guard didLoadInitialValues, editedName != viewModel.workspace?.name else { return }
+        let trimmed = editedName.trimmingCharacters(in: .whitespaces)
+        guard didLoadInitialValues, !trimmed.isEmpty, editedName != viewModel.workspace?.name else { return }
         viewModel.updateWorkspace(name: editedName)
     }
 

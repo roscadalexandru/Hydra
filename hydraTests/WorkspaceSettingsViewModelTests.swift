@@ -206,6 +206,118 @@ final class WorkspaceSettingsViewModelTests: XCTestCase {
         XCTAssertEqual(count, 0)
     }
 
+    // MARK: - Duplicate Path Rejection
+
+    func testAddProjectWithDuplicatePathDoesNotCreateSecondRecord() throws {
+        let db = try TestDatabase.make()
+        var workspace = Workspace(name: "WS")
+        try db.dbWriter.write { dbConn in
+            try workspace.insert(dbConn)
+        }
+
+        let workspaceId = try XCTUnwrap(workspace.id)
+        let vm = WorkspaceSettingsViewModel(workspaceId: workspaceId, database: db)
+
+        vm.addProject(name: "app", path: "/code/app")
+
+        let pred = NSPredicate { _, _ in vm.projects.count == 1 }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
+
+        // Try adding same path again
+        vm.addProject(name: "app-copy", path: "/code/app")
+
+        // Wait a moment for the async task to complete, then verify still 1 project
+        let errorPred = NSPredicate { _, _ in vm.errorMessage != nil }
+        let errorExp = XCTNSPredicateExpectation(predicate: errorPred, object: nil)
+        wait(for: [errorExp], timeout: 2.0)
+
+        let count = try db.dbWriter.read { dbConn in
+            try Project.filter(Project.Columns.workspaceId == workspaceId).fetchCount(dbConn)
+        }
+        XCTAssertEqual(count, 1)
+        XCTAssertNotNil(vm.errorMessage)
+    }
+
+    // MARK: - Empty Name Rejection
+
+    func testUpdateWorkspaceWithEmptyNameIsIgnored() throws {
+        let db = try TestDatabase.make()
+        var workspace = Workspace(name: "Original")
+        try db.dbWriter.write { dbConn in
+            try workspace.insert(dbConn)
+        }
+
+        let workspaceId = try XCTUnwrap(workspace.id)
+        let vm = WorkspaceSettingsViewModel(workspaceId: workspaceId, database: db)
+
+        let loaded = NSPredicate { _, _ in vm.workspace != nil }
+        wait(for: [XCTNSPredicateExpectation(predicate: loaded, object: nil)], timeout: 2.0)
+
+        vm.updateWorkspace(name: "")
+
+        // Give the async task time to run (if it would)
+        let settledPred = NSPredicate { _, _ in
+            // Check DB directly — name should still be "Original"
+            let fetched = try? db.dbWriter.read { dbConn in
+                try Workspace.fetchOne(dbConn, key: workspaceId)
+            }
+            return fetched?.name == "Original"
+        }
+        let exp = XCTNSPredicateExpectation(predicate: settledPred, object: nil)
+        wait(for: [exp], timeout: 2.0)
+
+        let fetched = try db.dbWriter.read { dbConn in
+            try Workspace.fetchOne(dbConn, key: workspaceId)
+        }
+        XCTAssertEqual(fetched?.name, "Original")
+    }
+
+    func testUpdateWorkspaceWithWhitespaceOnlyNameIsIgnored() throws {
+        let db = try TestDatabase.make()
+        var workspace = Workspace(name: "Original")
+        try db.dbWriter.write { dbConn in
+            try workspace.insert(dbConn)
+        }
+
+        let workspaceId = try XCTUnwrap(workspace.id)
+        let vm = WorkspaceSettingsViewModel(workspaceId: workspaceId, database: db)
+
+        let loaded = NSPredicate { _, _ in vm.workspace != nil }
+        wait(for: [XCTNSPredicateExpectation(predicate: loaded, object: nil)], timeout: 2.0)
+
+        vm.updateWorkspace(name: "   ")
+
+        let settledPred = NSPredicate { _, _ in
+            let fetched = try? db.dbWriter.read { dbConn in
+                try Workspace.fetchOne(dbConn, key: workspaceId)
+            }
+            return fetched?.name == "Original"
+        }
+        let exp = XCTNSPredicateExpectation(predicate: settledPred, object: nil)
+        wait(for: [exp], timeout: 2.0)
+
+        let fetched = try db.dbWriter.read { dbConn in
+            try Workspace.fetchOne(dbConn, key: workspaceId)
+        }
+        XCTAssertEqual(fetched?.name, "Original")
+    }
+
+    // MARK: - Error Message
+
+    func testErrorMessageInitiallyNil() throws {
+        let db = try TestDatabase.make()
+        var workspace = Workspace(name: "WS")
+        try db.dbWriter.write { dbConn in
+            try workspace.insert(dbConn)
+        }
+
+        let workspaceId = try XCTUnwrap(workspace.id)
+        let vm = WorkspaceSettingsViewModel(workspaceId: workspaceId, database: db)
+
+        XCTAssertNil(vm.errorMessage)
+    }
+
     // MARK: - Live Observation
 
     func testProjectObservationUpdatesWhenProjectAdded() throws {
@@ -218,7 +330,7 @@ final class WorkspaceSettingsViewModelTests: XCTestCase {
         let workspaceId = try XCTUnwrap(workspace.id)
         let vm = WorkspaceSettingsViewModel(workspaceId: workspaceId, database: db)
 
-        // Wait for initial empty state
+        // Wait for workspace to load before asserting projects
         let empty = NSPredicate { _, _ in vm.workspace != nil }
         wait(for: [XCTNSPredicateExpectation(predicate: empty, object: nil)], timeout: 2.0)
         XCTAssertTrue(vm.projects.isEmpty)

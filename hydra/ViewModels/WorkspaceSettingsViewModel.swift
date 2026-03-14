@@ -6,6 +6,7 @@ import Combine
 final class WorkspaceSettingsViewModel {
     var workspace: Workspace?
     var projects: [Project] = []
+    var errorMessage: String?
 
     private let workspaceId: Int64
     private let database: AppDatabase
@@ -26,9 +27,12 @@ final class WorkspaceSettingsViewModel {
         description: String? = nil,
         autonomyMode: Workspace.AutonomyMode? = nil
     ) {
+        if let name, name.trimmingCharacters(in: .whitespaces).isEmpty {
+            return
+        }
         let database = self.database
         let workspaceId = self.workspaceId
-        Task.detached {
+        Task.detached { [weak self] in
             do {
                 try await database.dbWriter.write { db in
                     if var ws = try Workspace.fetchOne(db, key: workspaceId) {
@@ -40,7 +44,9 @@ final class WorkspaceSettingsViewModel {
                     }
                 }
             } catch {
-                print("Failed to update workspace: \(error)")
+                await MainActor.run {
+                    self?.errorMessage = "Failed to update workspace: \(error.localizedDescription)"
+                }
             }
         }
     }
@@ -48,27 +54,43 @@ final class WorkspaceSettingsViewModel {
     func addProject(name: String, path: String) {
         let database = self.database
         let workspaceId = self.workspaceId
-        Task.detached {
+        Task.detached { [weak self] in
             do {
+                let isDuplicate = try await database.dbWriter.read { db in
+                    try Project
+                        .filter(Project.Columns.workspaceId == workspaceId)
+                        .filter(Project.Columns.path == path)
+                        .fetchCount(db) > 0
+                }
+                if isDuplicate {
+                    await MainActor.run {
+                        self?.errorMessage = "A project at \"\(path)\" already exists in this workspace."
+                    }
+                    return
+                }
                 try await database.dbWriter.write { db in
                     var project = Project(workspaceId: workspaceId, name: name, path: path)
                     try project.insert(db)
                 }
             } catch {
-                print("Failed to add project: \(error)")
+                await MainActor.run {
+                    self?.errorMessage = "Failed to add project: \(error.localizedDescription)"
+                }
             }
         }
     }
 
     func removeProject(_ projectId: Int64) {
         let database = self.database
-        Task.detached {
+        Task.detached { [weak self] in
             do {
                 _ = try await database.dbWriter.write { db in
                     try Project.deleteOne(db, key: projectId)
                 }
             } catch {
-                print("Failed to remove project: \(error)")
+                await MainActor.run {
+                    self?.errorMessage = "Failed to remove project: \(error.localizedDescription)"
+                }
             }
         }
     }
