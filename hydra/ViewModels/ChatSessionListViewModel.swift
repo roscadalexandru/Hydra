@@ -31,13 +31,15 @@ final class ChatSessionListViewModel {
     func createSession(projectId: Int64? = nil) async throws -> ChatSession {
         var session = ChatSession(workspaceId: workspaceId, projectId: projectId)
         let db = database
-        try await Task.detached {
-            try await db.dbWriter.write { dbConn in
-                try session.insert(dbConn)
+        let inserted = try await Task.detached {
+            try await db.dbWriter.write { dbConn -> ChatSession in
+                var s = session
+                try s.insert(dbConn)
+                return s
             }
         }.value
-        sessions.insert(session, at: 0)
-        return session
+        sessions.insert(inserted, at: 0)
+        return inserted
     }
 
     func deleteSession(_ session: ChatSession) async throws {

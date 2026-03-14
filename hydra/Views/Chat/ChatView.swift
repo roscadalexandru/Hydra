@@ -91,7 +91,9 @@ struct ChatView: View {
             await loadProjects()
         }
         .onChange(of: selectedProjectId) { oldValue, newProjectId in
-            guard oldValue != newProjectId, let session = viewModel.session else { return }
+            guard oldValue != newProjectId,
+                  let session = viewModel.session,
+                  session.projectId != newProjectId else { return }
             Task {
                 try? await sessionListViewModel.updateSessionProject(session, projectId: newProjectId)
             }
