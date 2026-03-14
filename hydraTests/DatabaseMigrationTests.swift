@@ -18,6 +18,8 @@ final class DatabaseMigrationTests: XCTestCase {
             XCTAssertTrue(tables.contains("issues"))
             XCTAssertTrue(tables.contains("agent_runs"))
             XCTAssertTrue(tables.contains("agent_steps"))
+            XCTAssertTrue(tables.contains("chat_sessions"))
+            XCTAssertTrue(tables.contains("chat_messages"))
         }
     }
 

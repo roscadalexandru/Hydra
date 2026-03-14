@@ -82,6 +82,42 @@ struct AppDatabase {
             }
         }
 
+        migrator.registerMigration("v2") { db in
+            try db.create(table: "chat_sessions") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.belongsTo("workspace", onDelete: .cascade).notNull()
+                t.column("issueId", .integer).references("issues", onDelete: .setNull)
+                t.column("sdkSessionId", .text)
+                t.column("status", .text).notNull().defaults(to: "active")
+                t.column("title", .text).notNull().defaults(to: "New Chat")
+                t.column("totalCostUsd", .double)
+                t.column("totalDurationMs", .integer)
+                t.column("createdAt", .datetime).notNull()
+                t.column("updatedAt", .datetime).notNull()
+            }
+
+            try db.create(table: "chat_messages") { t in
+                t.autoIncrementedPrimaryKey("id")
+                t.column("chatSessionId", .integer)
+                    .notNull()
+                    .references("chat_sessions", onDelete: .cascade)
+                t.column("orderIndex", .integer).notNull()
+                t.column("role", .text).notNull()
+                t.column("content", .text).notNull().defaults(to: "")
+                t.column("toolName", .text)
+                t.column("toolId", .text)
+                t.column("toolInput", .text)
+                t.column("isError", .boolean).notNull().defaults(to: false)
+                t.column("createdAt", .datetime).notNull()
+            }
+
+            try db.create(
+                index: "chat_messages_on_session_order",
+                on: "chat_messages",
+                columns: ["chatSessionId", "orderIndex"]
+            )
+        }
+
         return migrator
     }
 }

@@ -1,4 +1,5 @@
 import SwiftUI
+import GRDB
 
 struct MainView: View {
     var body: some View {
@@ -50,13 +51,57 @@ struct RightPane: View {
             }
             .frame(minHeight: 200)
 
-            VStack(alignment: .leading, spacing: 0) {
-                header("Chat")
-                Text("Chat interface goes here")
+            ChatPane()
+                .frame(minHeight: 200)
+        }
+    }
+}
+
+// MARK: - Chat Pane
+
+struct ChatPane: View {
+    @State private var workspace: Workspace?
+    @State private var workingDirectory: String?
+    @State private var bridge: SidecarBridge?
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 0) {
+            header("Chat")
+            if let workspace, let workspaceId = workspace.id, let bridge {
+                ChatView(
+                    bridge: bridge,
+                    workspaceId: workspaceId,
+                    workingDirectory: workingDirectory ?? NSHomeDirectory()
+                )
+            } else {
+                Text("No workspace loaded")
                     .foregroundStyle(.secondary)
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
-            .frame(minHeight: 200)
+        }
+        .task {
+            await loadWorkspace()
+        }
+    }
+
+    private func loadWorkspace() async {
+        do {
+            let result = try await AppDatabase.shared.dbWriter.read { db -> (Workspace, String?)? in
+                guard let existing = try Workspace.fetchOne(db) else { return nil }
+                let project = try Project
+                    .filter(Project.Columns.workspaceId == existing.id!)
+                    .fetchOne(db)
+                return (existing, project?.path)
+            }
+            if let (ws, dir) = result {
+                workspace = ws
+                workingDirectory = dir
+                if bridge == nil {
+                    bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
+                }
+            }
+        } catch {
+            print("Failed to load workspace: \(error)")
         }
     }
 }
