@@ -104,7 +104,7 @@ struct ChatPane: View {
         .task {
             observeFirstProject()
             if bridge == nil {
-                bridge = SidecarBridge(sidecarScript: "sidecar/index.js")
+                bridge = SidecarBridge(sidecarScript: "sidecar/src/index.js")
             }
         }
     }

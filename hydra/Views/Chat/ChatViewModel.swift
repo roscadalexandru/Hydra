@@ -89,6 +89,7 @@ final class ChatViewModel {
                     self.onSessionCreated?(inserted)
                     self.continueSend(text: text)
                 } catch {
+                    print("[ChatViewModel] Failed to create session: \(error)")
                     self.errorMessage = "Failed to create session: \(error.localizedDescription)"
                 }
             }
@@ -99,6 +100,7 @@ final class ChatViewModel {
     }
 
     private func continueSend(text: String) {
+        print("[ChatViewModel] continueSend called, session=\(session?.id ?? -1), workingDirectory=\(workingDirectory)")
         // Persist user message
         persistMessage(role: .user, content: text)
 
@@ -199,6 +201,7 @@ final class ChatViewModel {
     }
 
     private func handleStreamError(_ error: Error) {
+        print("[ChatViewModel] Stream error: \(error)")
         errorMessage = error.localizedDescription
         session?.status = .failed
         updateSession()

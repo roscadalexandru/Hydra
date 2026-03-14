@@ -57,7 +57,8 @@ struct ChatView: View {
                 ChatHeaderView(
                     sessionTitle: viewModel.session?.title ?? "New Chat",
                     projects: projects,
-                    selectedProjectId: $selectedProjectId
+                    selectedProjectId: $selectedProjectId,
+                    sidecarStatus: bridge.status
                 )
 
                 Divider()
@@ -68,6 +69,23 @@ struct ChatView: View {
                     isStreaming: viewModel.isStreaming
                 )
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+
+                if let error = viewModel.errorMessage {
+                    HStack {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundStyle(.red)
+                        Text(error)
+                            .font(.caption)
+                            .foregroundStyle(.red)
+                        Spacer()
+                        Button("Dismiss") { viewModel.errorMessage = nil }
+                            .buttonStyle(.borderless)
+                            .font(.caption)
+                    }
+                    .padding(.horizontal, 12)
+                    .padding(.vertical, 6)
+                    .background(.red.opacity(0.1))
+                }
 
                 ChatInputView(
                     text: $viewModel.inputText,
