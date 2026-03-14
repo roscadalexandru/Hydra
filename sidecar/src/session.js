@@ -13,7 +13,7 @@ export class Session {
 
   async start(config, onEvent) {
     this.#config = config;
-    await this.#run(config.prompt, null, onEvent);
+    await this.#run(config.prompt, config.resumeSessionId || null, onEvent);
   }
 
   async sendMessage(message, onEvent) {
@@ -21,9 +21,11 @@ export class Session {
   }
 
   async cancel() {
-    if (this.#query) {
-      await this.#query.interrupt();
-      this.#query.close();
+    const q = this.#query;
+    this.#query = null;
+    if (q) {
+      await q.interrupt();
+      q.close();
     }
   }
 
@@ -35,10 +37,11 @@ export class Session {
         systemPrompt: this.#config?.systemPrompt,
         permissionMode: this.#config?.permissionMode,
         allowedTools: this.#config?.allowedTools,
-        allowDangerouslySkipPermissions:
-          this.#config?.permissionMode === "bypassPermissions",
       },
     };
+    if (this.#config?.permissionMode === "bypassPermissions") {
+      opts.options.allowDangerouslySkipPermissions = true;
+    }
     if (resumeSessionId) {
       opts.options.resume = resumeSessionId;
     }
@@ -57,6 +60,8 @@ export class Session {
         costUsd: 0,
         errors: [err.message],
       });
+    } finally {
+      this.#query = null;
     }
   }
 

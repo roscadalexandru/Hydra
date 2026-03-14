@@ -1,5 +1,5 @@
 import { createInterface } from "node:readline";
-import { parseCommand, InvalidRequestError } from "./protocol.js";
+import { parseCommand, formatError, InvalidRequestError } from "./protocol.js";
 import { createHandler } from "./handler.js";
 import { createQueryFn } from "./query-factory.js";
 
@@ -8,12 +8,6 @@ const rl = createInterface({ input: process.stdin });
 function writeLine(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
-
-const formatError = (id, code, message) => ({
-  jsonrpc: "2.0",
-  id,
-  error: { code, message },
-});
 
 const handleCommand = createHandler(createQueryFn(), writeLine);
 

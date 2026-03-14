@@ -9,6 +9,7 @@ import { Session } from "./session.js";
  */
 export function createHandler(queryFn, writeLine) {
   let activeSession = null;
+  let activeSessionId = null;
 
   function requireParam(cmd, name) {
     if (!cmd.params || cmd.params[name] == null) {
@@ -28,7 +29,14 @@ export function createHandler(queryFn, writeLine) {
         const { sessionId, prompt, workingDirectory, permissionMode,
           systemPrompt, allowedTools, resumeSessionId } = cmd.params;
 
+        if (activeSession) {
+          await activeSession.cancel();
+          activeSession = null;
+          activeSessionId = null;
+        }
+
         activeSession = new Session(queryFn);
+        activeSessionId = sessionId;
 
         writeLine(
           formatResponse(cmd.id, { sessionId, status: "started" }),
@@ -58,8 +66,15 @@ export function createHandler(queryFn, writeLine) {
           return;
         }
 
+        if (sessionId !== activeSessionId) {
+          writeLine(
+            formatError(cmd.id, -32602, `Session ID mismatch: expected ${activeSessionId}, got ${sessionId}`),
+          );
+          return;
+        }
+
         writeLine(
-          formatResponse(cmd.id, { sessionId, status: "started" }),
+          formatResponse(cmd.id, { sessionId, status: "accepted" }),
         );
 
         const onEvent = (event) => {
@@ -76,6 +91,7 @@ export function createHandler(queryFn, writeLine) {
         if (activeSession) {
           await activeSession.cancel();
           activeSession = null;
+          activeSessionId = null;
         }
 
         writeLine(
@@ -91,6 +107,7 @@ export function createHandler(queryFn, writeLine) {
         if (activeSession) {
           await activeSession.cancel();
           activeSession = null;
+          activeSessionId = null;
         }
         writeLine(formatResponse(cmd.id, { status: "shutting_down" }));
         return "shutdown";

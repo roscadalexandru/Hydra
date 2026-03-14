@@ -1,23 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { Session } from "./session.js";
-
-/**
- * Creates a fake query function that yields the given messages.
- * Returns an async generator with interrupt() and close() methods.
- */
-function fakeQuery(messages) {
-  return (_opts) => {
-    const gen = (async function* () {
-      for (const msg of messages) {
-        yield msg;
-      }
-    })();
-    gen.interrupt = async () => {};
-    gen.close = () => {};
-    return gen;
-  };
-}
+import { fakeQuery, makeInitMsg } from "./test-helpers.js";
 
 describe("Session", () => {
   describe("start()", () => {
@@ -59,25 +43,64 @@ describe("Session", () => {
       assert.equal(events[0].sdkSessionId, "sdk-session-abc");
     });
 
+    it("passes resumeSessionId to query options", async () => {
+      let capturedOpts = null;
+
+      const queryFn = (opts) => {
+        capturedOpts = opts;
+        const gen = (async function* () {
+          yield makeInitMsg();
+        })();
+        gen.interrupt = async () => {};
+        gen.close = () => {};
+        return gen;
+      };
+
+      const session = new Session(queryFn);
+      await session.start(
+        {
+          sessionId: "h-1",
+          prompt: "Resume",
+          workingDirectory: "/tmp",
+          permissionMode: "default",
+          resumeSessionId: "prev-sdk-session",
+        },
+        () => {},
+      );
+
+      assert.equal(capturedOpts.options.resume, "prev-sdk-session");
+    });
+
+    it("does not set allowDangerouslySkipPermissions when not bypass mode", async () => {
+      let capturedOpts = null;
+
+      const queryFn = (opts) => {
+        capturedOpts = opts;
+        const gen = (async function* () {
+          yield makeInitMsg();
+        })();
+        gen.interrupt = async () => {};
+        gen.close = () => {};
+        return gen;
+      };
+
+      const session = new Session(queryFn);
+      await session.start(
+        {
+          sessionId: "h-1",
+          prompt: "Hi",
+          workingDirectory: "/tmp",
+          permissionMode: "default",
+        },
+        () => {},
+      );
+
+      assert.equal(capturedOpts.options.allowDangerouslySkipPermissions, undefined);
+    });
+
     it("emits assistant_message for assistant type messages", async () => {
       const messages = [
-        {
-          type: "system",
-          subtype: "init",
-          session_id: "sdk-1",
-          uuid: "u1",
-          tools: [],
-          model: "claude-opus-4-6",
-          permissionMode: "default",
-          claude_code_version: "1.0.0",
-          cwd: "/tmp",
-          mcp_servers: [],
-          apiKeySource: "env",
-          slash_commands: [],
-          output_style: "default",
-          skills: [],
-          plugins: [],
-        },
+        makeInitMsg(),
         {
           type: "assistant",
           uuid: "u2",
@@ -114,23 +137,7 @@ describe("Session", () => {
 
     it("emits tool_use and tool_result for tool content blocks", async () => {
       const messages = [
-        {
-          type: "system",
-          subtype: "init",
-          session_id: "sdk-1",
-          uuid: "u1",
-          tools: [],
-          model: "claude-opus-4-6",
-          permissionMode: "default",
-          claude_code_version: "1.0.0",
-          cwd: "/tmp",
-          mcp_servers: [],
-          apiKeySource: "env",
-          slash_commands: [],
-          output_style: "default",
-          skills: [],
-          plugins: [],
-        },
+        makeInitMsg(),
         {
           type: "assistant",
           uuid: "u2",
@@ -191,23 +198,7 @@ describe("Session", () => {
 
     it("emits text_delta for partial assistant messages", async () => {
       const messages = [
-        {
-          type: "system",
-          subtype: "init",
-          session_id: "sdk-1",
-          uuid: "u1",
-          tools: [],
-          model: "claude-opus-4-6",
-          permissionMode: "default",
-          claude_code_version: "1.0.0",
-          cwd: "/tmp",
-          mcp_servers: [],
-          apiKeySource: "env",
-          slash_commands: [],
-          output_style: "default",
-          skills: [],
-          plugins: [],
-        },
+        makeInitMsg(),
         {
           type: "assistant",
           subtype: "partial",
@@ -241,23 +232,7 @@ describe("Session", () => {
 
     it("emits session_complete on successful result message", async () => {
       const messages = [
-        {
-          type: "system",
-          subtype: "init",
-          session_id: "sdk-1",
-          uuid: "u1",
-          tools: [],
-          model: "claude-opus-4-6",
-          permissionMode: "default",
-          claude_code_version: "1.0.0",
-          cwd: "/tmp",
-          mcp_servers: [],
-          apiKeySource: "env",
-          slash_commands: [],
-          output_style: "default",
-          skills: [],
-          plugins: [],
-        },
+        makeInitMsg(),
         {
           type: "result",
           subtype: "success",
@@ -296,23 +271,7 @@ describe("Session", () => {
 
     it("emits session_error on error result message", async () => {
       const messages = [
-        {
-          type: "system",
-          subtype: "init",
-          session_id: "sdk-1",
-          uuid: "u1",
-          tools: [],
-          model: "claude-opus-4-6",
-          permissionMode: "default",
-          claude_code_version: "1.0.0",
-          cwd: "/tmp",
-          mcp_servers: [],
-          apiKeySource: "env",
-          slash_commands: [],
-          output_style: "default",
-          skills: [],
-          plugins: [],
-        },
+        makeInitMsg(),
         {
           type: "result",
           subtype: "error_during_execution",
@@ -385,23 +344,7 @@ describe("Session", () => {
       const queryFn = (opts) => {
         capturedOpts = opts;
         const gen = (async function* () {
-          yield {
-            type: "system",
-            subtype: "init",
-            session_id: "sdk-1",
-            uuid: "u1",
-            tools: [],
-            model: "claude-opus-4-6",
-            permissionMode: "default",
-            claude_code_version: "1.0.0",
-            cwd: "/tmp",
-            mcp_servers: [],
-            apiKeySource: "env",
-            slash_commands: [],
-            output_style: "default",
-            skills: [],
-            plugins: [],
-          };
+          yield makeInitMsg();
           yield {
             type: "result",
             subtype: "success",
@@ -452,43 +395,22 @@ describe("Session", () => {
     it("calls interrupt() and close() on the active query", async () => {
       let interruptCalled = false;
       let closeCalled = false;
+      let resolveBlock;
 
       const queryFn = (_opts) => {
-        // This generator never completes on its own - simulates a long-running session
         const gen = (async function* () {
-          yield {
-            type: "system",
-            subtype: "init",
-            session_id: "sdk-1",
-            uuid: "u1",
-            tools: [],
-            model: "claude-opus-4-6",
-            permissionMode: "default",
-            claude_code_version: "1.0.0",
-            cwd: "/tmp",
-            mcp_servers: [],
-            apiKeySource: "env",
-            slash_commands: [],
-            output_style: "default",
-            skills: [],
-            plugins: [],
-          };
-          // Simulate waiting for more messages
-          await new Promise((resolve) => setTimeout(resolve, 5000));
+          yield makeInitMsg();
+          await new Promise((resolve) => { resolveBlock = resolve; });
         })();
-        gen.interrupt = async () => {
-          interruptCalled = true;
-        };
-        gen.close = () => {
-          closeCalled = true;
-        };
+        gen.interrupt = async () => { interruptCalled = true; };
+        gen.close = () => { closeCalled = true; };
         return gen;
       };
 
       const session = new Session(queryFn);
       const events = [];
 
-      // Start session but don't await it (it would hang)
+      // Start session but don't await it (it would block)
       const startPromise = session.start(
         {
           sessionId: "h-1",
@@ -499,13 +421,31 @@ describe("Session", () => {
         (event) => events.push(event),
       );
 
-      // Wait a tick for the generator to yield the init message
-      await new Promise((resolve) => setTimeout(resolve, 10));
+      // Wait for the generator to yield the init message
+      await new Promise(setImmediate);
 
       await session.cancel();
 
       assert.ok(interruptCalled, "should have called interrupt()");
       assert.ok(closeCalled, "should have called close()");
+    });
+
+    it("is safe to call after session completes", async () => {
+      const queryFn = fakeQuery([makeInitMsg()]);
+      const session = new Session(queryFn);
+
+      await session.start(
+        {
+          sessionId: "h-1",
+          prompt: "Quick",
+          workingDirectory: "/tmp",
+          permissionMode: "default",
+        },
+        () => {},
+      );
+
+      // Should not throw — #query is cleared after run completes
+      await session.cancel();
     });
   });
 });

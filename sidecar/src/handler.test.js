@@ -1,55 +1,7 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import { createHandler } from "./handler.js";
-
-function fakeQuery(messages) {
-  return (_opts) => {
-    const gen = (async function* () {
-      for (const msg of messages) {
-        yield msg;
-      }
-    })();
-    gen.interrupt = async () => {};
-    gen.close = () => {};
-    return gen;
-  };
-}
-
-function makeInitMsg(sessionId = "sdk-1") {
-  return {
-    type: "system",
-    subtype: "init",
-    session_id: sessionId,
-    uuid: "u1",
-    tools: [],
-    model: "claude-opus-4-6",
-    permissionMode: "default",
-    claude_code_version: "1.0.0",
-    cwd: "/tmp",
-    mcp_servers: [],
-    apiKeySource: "env",
-    slash_commands: [],
-    output_style: "default",
-    skills: [],
-    plugins: [],
-  };
-}
-
-function makeResultMsg(sessionId = "sdk-1") {
-  return {
-    type: "result",
-    subtype: "success",
-    uuid: "u2",
-    session_id: sessionId,
-    is_error: false,
-    duration_ms: 100,
-    duration_api_ms: 80,
-    total_cost_usd: 0.01,
-    num_turns: 1,
-    result: "Done",
-    usage: {},
-  };
-}
+import { fakeQuery, makeInitMsg, makeResultMsg, createBlockingQuery } from "./test-helpers.js";
 
 describe("handler", () => {
   it("start_session returns ack and streams events via writeLine", async () => {
@@ -93,7 +45,7 @@ describe("handler", () => {
     assert.ok(sessionComplete, "should have session_complete event");
   });
 
-  it("send_message returns ack and streams events", async () => {
+  it("send_message returns ack with accepted status and streams events", async () => {
     let callCount = 0;
     const queryFn = (_opts) => {
       callCount++;
@@ -139,34 +91,52 @@ describe("handler", () => {
     const ack = output.find((o) => o.id === 2);
     assert.ok(ack, "should have ack for send_message");
     assert.equal(ack.result.sessionId, "hydra-1");
-    assert.equal(ack.result.status, "started");
+    assert.equal(ack.result.status, "accepted");
     assert.equal(callCount, 2, "should have called queryFn twice");
   });
 
-  it("cancel_session returns ack and cancels active session", async () => {
-    let interruptCalled = false;
-    let closeCalled = false;
-
-    const queryFn = (_opts) => {
-      const gen = (async function* () {
-        yield makeInitMsg();
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-      })();
-      gen.interrupt = async () => {
-        interruptCalled = true;
-      };
-      gen.close = () => {
-        closeCalled = true;
-      };
-      return gen;
-    };
-
+  it("send_message with mismatched sessionId returns error", async () => {
+    const queryFn = fakeQuery([makeInitMsg(), makeResultMsg()]);
     const output = [];
     const writeLine = (obj) => output.push(obj);
     const handler = createHandler(queryFn, writeLine);
 
-    // Start a long-running session (don't await — it would hang)
-    handler({
+    await handler({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "start_session",
+      params: {
+        sessionId: "hydra-1",
+        prompt: "Hello",
+        workingDirectory: "/tmp",
+        permissionMode: "default",
+      },
+    });
+
+    output.length = 0;
+
+    await handler({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "send_message",
+      params: { sessionId: "wrong-id", message: "Hi" },
+    });
+
+    const errResp = output.find((o) => o.id === 2);
+    assert.ok(errResp.error, "should return error for mismatched sessionId");
+    assert.equal(errResp.error.code, -32602);
+    assert.match(errResp.error.message, /mismatch/i);
+  });
+
+  it("cancel_session returns ack and cancels active session", async () => {
+    const blocking = createBlockingQuery();
+
+    const output = [];
+    const writeLine = (obj) => output.push(obj);
+    const handler = createHandler(blocking.queryFn, writeLine);
+
+    // Start a long-running session (don't await — it would block)
+    const startPromise = handler({
       jsonrpc: "2.0",
       id: 1,
       method: "start_session",
@@ -178,7 +148,8 @@ describe("handler", () => {
       },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    // Wait for the init message to be yielded
+    await new Promise(setImmediate);
 
     await handler({
       jsonrpc: "2.0",
@@ -190,8 +161,8 @@ describe("handler", () => {
     const ack = output.find((o) => o.id === 2);
     assert.ok(ack);
     assert.equal(ack.result.status, "cancelled");
-    assert.ok(interruptCalled, "should have called interrupt");
-    assert.ok(closeCalled, "should have called close");
+    assert.ok(blocking.interruptCalled, "should have called interrupt");
+    assert.ok(blocking.closeCalled, "should have called close");
   });
 
   it("send_message after cancel_session returns no active session error", async () => {
@@ -234,6 +205,72 @@ describe("handler", () => {
     assert.match(errResp.error.message, /no active session/i);
   });
 
+  it("start_session cancels existing session before starting new one", async () => {
+    let callCount = 0;
+    let firstInterruptCalled = false;
+    let firstCloseCalled = false;
+    let resolveFirst;
+
+    const queryFn = (_opts) => {
+      callCount++;
+      if (callCount === 1) {
+        // First call: blocks until resolved externally
+        const gen = (async function* () {
+          yield makeInitMsg();
+          await new Promise((resolve) => { resolveFirst = resolve; });
+        })();
+        gen.interrupt = async () => { firstInterruptCalled = true; };
+        gen.close = () => { firstCloseCalled = true; };
+        return gen;
+      }
+      // Second call: completes immediately
+      const gen = (async function* () {
+        yield makeInitMsg("sdk-2");
+        yield makeResultMsg("sdk-2");
+      })();
+      gen.interrupt = async () => {};
+      gen.close = () => {};
+      return gen;
+    };
+
+    const output = [];
+    const writeLine = (obj) => output.push(obj);
+    const handler = createHandler(queryFn, writeLine);
+
+    // Start first session (don't await — it blocks)
+    handler({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "start_session",
+      params: {
+        sessionId: "hydra-1",
+        prompt: "First",
+        workingDirectory: "/tmp",
+        permissionMode: "default",
+      },
+    });
+
+    await new Promise(setImmediate);
+    assert.ok(!firstInterruptCalled, "should not have interrupted yet");
+
+    // Start second session — should cancel the first
+    await handler({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "start_session",
+      params: {
+        sessionId: "hydra-2",
+        prompt: "Second",
+        workingDirectory: "/tmp",
+        permissionMode: "default",
+      },
+    });
+
+    assert.ok(firstInterruptCalled, "should have cancelled first session");
+    assert.ok(firstCloseCalled, "should have closed first session");
+    assert.equal(callCount, 2);
+  });
+
   it("returns error for missing sessionId", async () => {
     const output = [];
     const writeLine = (obj) => output.push(obj);
@@ -251,22 +288,11 @@ describe("handler", () => {
   });
 
   it("shutdown cancels active session", async () => {
-    let closeCalled = false;
-    const queryFn = (_opts) => {
-      const gen = (async function* () {
-        yield makeInitMsg();
-        await new Promise((resolve) => setTimeout(resolve, 5000));
-      })();
-      gen.interrupt = async () => {};
-      gen.close = () => {
-        closeCalled = true;
-      };
-      return gen;
-    };
+    const blocking = createBlockingQuery();
 
     const output = [];
     const writeLine = (obj) => output.push(obj);
-    const handler = createHandler(queryFn, writeLine);
+    const handler = createHandler(blocking.queryFn, writeLine);
 
     handler({
       jsonrpc: "2.0",
@@ -280,16 +306,16 @@ describe("handler", () => {
       },
     });
 
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await new Promise(setImmediate);
 
-    const result = await handler({
+    await handler({
       jsonrpc: "2.0",
       id: 99,
       method: "shutdown",
       params: {},
     });
 
-    assert.ok(closeCalled, "shutdown should cancel active session");
+    assert.ok(blocking.closeCalled, "shutdown should cancel active session");
     const shutdownAck = output.find((o) => o.id === 99);
     assert.equal(shutdownAck.result.status, "shutting_down");
   });
