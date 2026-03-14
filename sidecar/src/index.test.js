@@ -36,9 +36,13 @@ function sendCommands(commands, timeoutMs = 3000) {
 
     proc.on("close", () => {
       clearTimeout(timeout);
-      const lines = stdout.trim().split("\n").filter(Boolean);
-      const responses = lines.map((line) => JSON.parse(line));
-      resolve(responses);
+      try {
+        const lines = stdout.trim().split("\n").filter(Boolean);
+        const responses = lines.map((line) => JSON.parse(line));
+        resolve(responses);
+      } catch (err) {
+        reject(new Error(`Failed to parse stdout as JSON: ${err.message}\nstdout: ${stdout}`));
+      }
     });
 
     for (const cmd of commands) {

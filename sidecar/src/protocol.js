@@ -29,6 +29,8 @@ export function parseCommand(line) {
   if (parsed.jsonrpc !== "2.0") {
     throw new InvalidRequestError('Missing or invalid "jsonrpc" field');
   }
+  // Intentionally restricted to numeric IDs for this internal protocol.
+  // JSON-RPC 2.0 also allows strings, but Swift sends auto-incrementing ints.
   if (typeof parsed.id !== "number") {
     throw new InvalidRequestError('Missing or invalid "id" field');
   }
