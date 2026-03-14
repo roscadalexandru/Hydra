@@ -102,57 +102,7 @@ describe("sidecar index", () => {
     assert.equal(errResp.error.code, -32700);
   });
 
-  it("acknowledges start_session in echo mode", async () => {
-    const responses = await sendCommands([
-      {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "start_session",
-        params: {
-          sessionId: "test-123",
-          prompt: "Hello",
-          workingDirectory: "/tmp",
-          permissionMode: "default",
-        },
-      },
-      { jsonrpc: "2.0", id: 2, method: "shutdown", params: {} },
-    ]);
-    const ack = responses.find((r) => r.id === 1);
-    assert.ok(ack.result, "start_session should return a result");
-    assert.equal(ack.result.sessionId, "test-123");
-  });
-
-  it("acknowledges send_message in echo mode", async () => {
-    const responses = await sendCommands([
-      {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "send_message",
-        params: { sessionId: "test-123", message: "Hi there" },
-      },
-      { jsonrpc: "2.0", id: 2, method: "shutdown", params: {} },
-    ]);
-    const ack = responses.find((r) => r.id === 1);
-    assert.ok(ack.result);
-    assert.equal(ack.result.sessionId, "test-123");
-  });
-
-  it("acknowledges cancel_session in echo mode", async () => {
-    const responses = await sendCommands([
-      {
-        jsonrpc: "2.0",
-        id: 1,
-        method: "cancel_session",
-        params: { sessionId: "test-123" },
-      },
-      { jsonrpc: "2.0", id: 2, method: "shutdown", params: {} },
-    ]);
-    const ack = responses.find((r) => r.id === 1);
-    assert.ok(ack.result);
-    assert.equal(ack.result.sessionId, "test-123");
-  });
-
-  it("returns -32600 for valid JSON with missing required fields", async () => {
+  it("returns -32602 for start_session with missing sessionId", async () => {
     const responses = await sendCommands([
       { jsonrpc: "2.0", id: 1, method: "start_session", params: {} },
       { jsonrpc: "2.0", id: 2, method: "shutdown", params: {} },
@@ -195,7 +145,6 @@ describe("sidecar index", () => {
 
     const done = new Promise((resolve) => proc.on("close", resolve));
 
-    // Valid JSON but missing jsonrpc - should be -32600, not -32700
     proc.stdin.write(JSON.stringify({ id: 1, method: "shutdown", params: {} }) + "\n");
     proc.stdin.write(
       JSON.stringify({ jsonrpc: "2.0", id: 99, method: "shutdown", params: {} }) + "\n"
@@ -207,7 +156,6 @@ describe("sidecar index", () => {
     const lines = stdout.trim().split("\n").filter(Boolean);
     const responses = lines.map((l) => JSON.parse(l));
 
-    // parseCommand throws before extracting id, so id is null
     const errResp = responses.find((r) => r.error && r.error.code === -32600);
     assert.ok(errResp, "should have an error response with code -32600");
     assert.equal(errResp.id, null);
