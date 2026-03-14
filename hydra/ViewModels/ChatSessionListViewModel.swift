@@ -18,25 +18,35 @@ final class ChatSessionListViewModel {
     }
 
     func loadSessions() async throws {
-        sessions = try await database.dbWriter.read { db in
-            try ChatSession.fetchAllForWorkspace(db, workspaceId: self.workspaceId)
-        }
+        let wsId = workspaceId
+        let db = database
+        sessions = try await Task.detached {
+            try await db.dbWriter.read { dbConn in
+                try ChatSession.fetchAllForWorkspace(dbConn, workspaceId: wsId)
+            }
+        }.value
     }
 
     @discardableResult
     func createSession(projectId: Int64? = nil) async throws -> ChatSession {
         var session = ChatSession(workspaceId: workspaceId, projectId: projectId)
-        try await database.dbWriter.write { db in
-            try session.insert(db)
-        }
+        let db = database
+        try await Task.detached {
+            try await db.dbWriter.write { dbConn in
+                try session.insert(dbConn)
+            }
+        }.value
         sessions.insert(session, at: 0)
         return session
     }
 
     func deleteSession(_ session: ChatSession) async throws {
-        try await database.dbWriter.write { db in
-            _ = try session.delete(db)
-        }
+        let db = database
+        try await Task.detached {
+            try await db.dbWriter.write { dbConn in
+                _ = try session.delete(dbConn)
+            }
+        }.value
         sessions.removeAll { $0.id == session.id }
         if selectedSessionId == session.id {
             selectedSessionId = nil
@@ -52,9 +62,13 @@ final class ChatSessionListViewModel {
         var updated = sessions[index]
         updated.title = title
         updated.updatedAt = Date()
-        try await database.dbWriter.write { db in
-            try updated.update(db)
-        }
+        let db = database
+        let u = updated
+        try await Task.detached {
+            try await db.dbWriter.write { dbConn in
+                try u.update(dbConn)
+            }
+        }.value
         sessions[index] = updated
     }
 
@@ -63,9 +77,13 @@ final class ChatSessionListViewModel {
         var updated = sessions[index]
         updated.projectId = projectId
         updated.updatedAt = Date()
-        try await database.dbWriter.write { db in
-            try updated.update(db)
-        }
+        let db = database
+        let u = updated
+        try await Task.detached {
+            try await db.dbWriter.write { dbConn in
+                try u.update(dbConn)
+            }
+        }.value
         sessions[index] = updated
     }
 }

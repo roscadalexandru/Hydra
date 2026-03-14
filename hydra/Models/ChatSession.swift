@@ -71,7 +71,7 @@ struct ChatSession: Identifiable, Codable, Equatable, FetchableRecord, MutablePe
     // MARK: - Title Generation
 
     static func generateTitle(from message: String) -> String {
-        let trimmed = message.trimmingCharacters(in: .whitespaces)
+        let trimmed = message.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.count <= 50 {
             return trimmed
         }

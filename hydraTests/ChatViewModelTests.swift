@@ -9,7 +9,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Send Creates User Message
 
     func testSendCreatesUserMessage() async throws {
-        let (vm, _, db) = try makeViewModel()
+        let (vm, _, db, workspace) = try makeViewModel()
         vm.inputText = "Hello agent"
         vm.send()
 
@@ -28,14 +28,14 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSendClearsInputText() async throws {
-        let (vm, _, _) = try makeViewModel()
+        let (vm, _, _, _) = try makeViewModel()
         vm.inputText = "Hello"
         vm.send()
         XCTAssertEqual(vm.inputText, "")
     }
 
     func testSendIgnoresEmptyInput() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "   "
         vm.send()
         XCTAssertFalse(mock.startSessionCalled)
@@ -44,7 +44,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Streaming
 
     func testTextDeltaAccumulates() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -57,7 +57,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testAssistantMessagePersisted() async throws {
-        let (vm, mock, db) = try makeViewModel()
+        let (vm, mock, db, workspace) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -84,7 +84,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Tool Events
 
     func testToolUseCreatesChatMessage() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Read a file"
         vm.send()
 
@@ -100,7 +100,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testToolResultCreatesChatMessage() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Read a file"
         vm.send()
 
@@ -115,7 +115,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testToolResultWithError() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Read a file"
         vm.send()
 
@@ -131,7 +131,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Session Lifecycle
 
     func testSessionStartedUpdatesSdkId() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -143,7 +143,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSessionCompleteUpdatesCost() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -159,7 +159,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSessionErrorSetsStatus() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -175,11 +175,11 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Session Loading
 
     func testLoadExistingSession() async throws {
-        let (vm, _, db) = try makeViewModel()
+        let (vm, _, db, workspace) = try makeViewModel()
 
         // Create a session with messages in the DB using the test workspace
         let session = try await makeSessionWithMessages(
-            db: db, workspaceId: testWorkspaceId, sdkSessionId: "sdk-prev", title: "Previous Chat",
+            db: db, workspaceId: workspace.id!, sdkSessionId: "sdk-prev", title: "Previous Chat",
             messages: [
                 (role: .user, content: "Hello"),
                 (role: .assistant, content: "Hi there!")
@@ -198,10 +198,10 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testLoadExistingSessionSetsNextOrderIndex() async throws {
-        let (vm, _, db) = try makeViewModel()
+        let (vm, _, db, workspace) = try makeViewModel()
 
         let session = try await makeSessionWithMessages(
-            db: db, workspaceId: testWorkspaceId,
+            db: db, workspaceId: workspace.id!,
             messages: [
                 (role: .user, content: "Hello"),
                 (role: .assistant, content: "Hi")
@@ -223,10 +223,10 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Session Resume
 
     func testSendInExistingSessionPassesResumeSessionId() async throws {
-        let (vm, mock, db) = try makeViewModel()
+        let (vm, mock, db, workspace) = try makeViewModel()
 
         let session = try await makeSessionWithMessages(
-            db: db, workspaceId: testWorkspaceId, sdkSessionId: "sdk-to-resume",
+            db: db, workspaceId: workspace.id!, sdkSessionId: "sdk-to-resume",
             messages: []
         )
 
@@ -240,7 +240,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSendInNewSessionHasNilResumeSessionId() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hello"
         vm.send()
 
@@ -251,7 +251,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Title Auto-generation
 
     func testFirstUserMessageUpdatesTitleFromDefault() async throws {
-        let (vm, mock, db) = try makeViewModel()
+        let (vm, mock, db, workspace) = try makeViewModel()
         vm.inputText = "How do I set up CI/CD?"
         vm.send()
 
@@ -271,7 +271,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSecondMessageDoesNotChangeTitle() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
 
         // First message
         vm.inputText = "First message"
@@ -297,7 +297,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Cancel
 
     func testCancelCallsBridge() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -310,7 +310,7 @@ final class ChatViewModelTests: XCTestCase {
 
     // MARK: - Helpers
 
-    private func makeViewModel() throws -> (ChatViewModel, MockChatBridge, AppDatabase) {
+    private func makeViewModel() throws -> (ChatViewModel, MockChatBridge, AppDatabase, Workspace) {
         let db = try TestDatabase.make()
         var workspace = Workspace(name: "Test")
         try db.dbWriter.write { dbConn in
@@ -323,12 +323,7 @@ final class ChatViewModelTests: XCTestCase {
             workspaceId: workspace.id!,
             workingDirectory: "/tmp"
         )
-        return (vm, mock, db)
-    }
-
-    private var testWorkspaceId: Int64 {
-        // Extracted from makeViewModel — workspace ID is always 1 for first insert
-        1
+        return (vm, mock, db, workspace)
     }
 
     private func makeSessionWithMessages(

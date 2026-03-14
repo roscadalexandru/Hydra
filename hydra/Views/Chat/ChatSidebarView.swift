@@ -5,6 +5,8 @@ struct ChatSidebarView: View {
     let onSelectSession: (ChatSession) -> Void
     let onNewChat: () -> Void
 
+    @State private var deleteError: String?
+
     var body: some View {
         VStack(spacing: 0) {
             // Header with New Chat button
@@ -47,7 +49,11 @@ struct ChatSidebarView: View {
                             isSelected: session.id == viewModel.selectedSessionId,
                             onDelete: {
                                 Task {
-                                    try? await viewModel.deleteSession(session)
+                                    do {
+                                        try await viewModel.deleteSession(session)
+                                    } catch {
+                                        deleteError = error.localizedDescription
+                                    }
                                 }
                             }
                         )
@@ -55,6 +61,16 @@ struct ChatSidebarView: View {
                     }
                 }
                 .listStyle(.sidebar)
+            }
+        }
+        .alert("Failed to delete session", isPresented: Binding(
+            get: { deleteError != nil },
+            set: { if !$0 { deleteError = nil } }
+        )) {
+            Button("OK") { deleteError = nil }
+        } message: {
+            if let deleteError {
+                Text(deleteError)
             }
         }
     }
