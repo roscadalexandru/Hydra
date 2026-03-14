@@ -3,7 +3,14 @@
 macOS native app (Swift + SwiftUI + GRDB). Autonomous AI dev agent with project management.
 
 ## Languages & Frameworks
-Primary language is TypeScript. Secondary: Swift (macOS app with XCTest, not Swift Testing). When editing Swift, use XCTest framework and verify GRDB conformance patterns against actual API docs before applying.
+Swift + SwiftUI macOS app. Uses GRDB for SQLite persistence. Verify GRDB conformance patterns against actual API docs before applying.
+
+## Architecture
+- `hydra/Models/` — GRDB models: Workspace → Project, Epic, Issue → AgentRun → AgentStep
+- `hydra/Database/` — `AppDatabase` with migrations (single v1 migration, pre-release)
+- `hydra/Services/` — `SidecarProcess` (JSON-RPC child process), `SidecarBridge` (high-level async API), `SidecarProtocol` (types)
+- `hydra/Views/` — SwiftUI views. `Board/` has kanban board (BoardView, BoardViewModel, KanbanColumnView, IssueCardView, IssueDetailView)
+- Workspace is the top-level container; Project is a repo/directory within a workspace
 
 ## Git & Version Control
 - When git worktree creation fails or any operation fails silently, immediately inform the user rather than falling back to an alternative approach without notice.
@@ -22,15 +29,6 @@ Primary language is TypeScript. Secondary: Swift (macOS app with XCTest, not Swi
 - `Issue` conflicts with `Testing.Issue` — use `hydra.Issue` in test files
 - Use XCTest (not Swift Testing `import Testing`) for test files
 
-## Knowledge Base
-Obsidian vault is used for all project notes (architecture, tasks, decisions, etc.).
-Notes live under `Hydra/` in the vault. Use `mcp__mcp-obsidian__*` tools to read/write them.
-
-## Obsidian Structure
-- `Hydra/Architecture/` — system design
-- `Hydra/Features/` — feature planning
-- `Hydra/Tasks/` — backlog and work tracking
-- `Hydra/Research/` — investigations
-- `Hydra/Decisions/` — ADRs
-- `Hydra/Meetings/` — meeting notes
-- `Hydra/Bugs/` — issue tracking
+## Knowledge Base (Obsidian)
+Project notes live under `Hydra/` in the Obsidian vault. Use `mcp__mcp-obsidian__*` tools.
+Subdirectories: Architecture, Features, Tasks, Research, Decisions, Meetings, Bugs.
