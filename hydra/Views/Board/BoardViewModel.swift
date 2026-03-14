@@ -9,9 +9,7 @@ final class BoardViewModel {
 
     private var cancellable: AnyCancellable?
 
-    init() {
-        observeIssues()
-    }
+    init() {}
 
     var columns: [Issue.Status] {
         Issue.Status.allCases
@@ -77,14 +75,20 @@ final class BoardViewModel {
                     self.workspace = newWorkspace
                 }
             }
+            observeIssues()
         } catch {
             print("Failed to ensure workspace: \(error)")
         }
     }
 
     private func observeIssues() {
+        guard let workspaceId = workspace?.id else { return }
+
         let observation = ValueObservation.tracking { db in
-            try Issue.order(Column("createdAt").asc).fetchAll(db)
+            try Issue
+                .filter(Issue.Columns.workspaceId == workspaceId)
+                .order(Column("createdAt").asc)
+                .fetchAll(db)
         }
 
         cancellable = observation

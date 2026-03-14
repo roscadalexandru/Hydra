@@ -36,7 +36,7 @@ struct BoardView: View {
 
     private var boardToolbar: some View {
         HStack {
-            Text("Project Board")
+            Text("Board")
                 .font(.headline)
             Spacer()
             Button {

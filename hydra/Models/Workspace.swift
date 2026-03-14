@@ -20,6 +20,7 @@ struct Workspace: Identifiable, Codable, Equatable, FetchableRecord, MutablePers
     enum Columns {
         static let id = Column(CodingKeys.id)
         static let name = Column(CodingKeys.name)
+        static let description = Column(CodingKeys.description)
         static let defaultAutonomyMode = Column(CodingKeys.defaultAutonomyMode)
         static let createdAt = Column(CodingKeys.createdAt)
         static let updatedAt = Column(CodingKeys.updatedAt)
