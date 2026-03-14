@@ -38,23 +38,30 @@ struct CancelSessionParams: Codable {
 
 // MARK: - Incoming messages (Node → Swift)
 
-struct RpcError: Codable, Equatable {
+struct RpcError: Codable, Equatable, Error {
     let code: Int
     let message: String
 }
 
-struct RpcResponse: Decodable {
+struct RpcResponse: Decodable, Equatable {
     let id: Int
     let result: AnyCodableValue?
     let error: RpcError?
+
+    var outcome: Result<AnyCodableValue, RpcError> {
+        if let error = error {
+            return .failure(error)
+        }
+        return .success(result ?? .null)
+    }
 }
 
-struct StreamNotification: Decodable {
+struct StreamNotification: Decodable, Equatable {
     let sessionId: String
     let event: AgentEvent
 }
 
-enum SidecarMessage: Decodable {
+enum SidecarMessage: Decodable, Equatable {
     case response(RpcResponse)
     case event(StreamNotification)
 
@@ -70,6 +77,15 @@ enum SidecarMessage: Decodable {
             let response = try RpcResponse(from: decoder)
             self = .response(response)
         } else if container.contains(.method) {
+            let method = try container.decode(String.self, forKey: .method)
+            guard method == "event" else {
+                throw DecodingError.dataCorrupted(
+                    DecodingError.Context(
+                        codingPath: decoder.codingPath,
+                        debugDescription: "Unknown notification method: '\(method)'"
+                    )
+                )
+            }
             guard container.contains(.params) else {
                 throw DecodingError.dataCorrupted(
                     DecodingError.Context(
@@ -93,11 +109,11 @@ enum SidecarMessage: Decodable {
 
 // MARK: - Agent Events
 
-enum AgentEvent: Decodable {
+enum AgentEvent: Decodable, Equatable {
     case assistantMessage(content: String)
     case textDelta(delta: String)
-    case toolUse(toolName: String, toolId: String, input: String)
-    case toolResult(toolId: String, result: String, isError: Bool)
+    case toolUse(toolName: String, toolId: String, input: AnyCodableValue)
+    case toolResult(toolId: String, result: AnyCodableValue, isError: Bool)
     case sessionStarted(sdkSessionId: String)
     case sessionComplete(durationMs: Int, costUsd: Double?)
     case sessionError(error: String)
@@ -131,11 +147,11 @@ enum AgentEvent: Decodable {
         case "tool_use":
             let toolName = try container.decode(String.self, forKey: .toolName)
             let toolId = try container.decode(String.self, forKey: .toolId)
-            let input = try container.decode(String.self, forKey: .input)
+            let input = try container.decode(AnyCodableValue.self, forKey: .input)
             self = .toolUse(toolName: toolName, toolId: toolId, input: input)
         case "tool_result":
             let toolId = try container.decode(String.self, forKey: .toolId)
-            let result = try container.decode(String.self, forKey: .result)
+            let result = try container.decode(AnyCodableValue.self, forKey: .result)
             let isError = try container.decode(Bool.self, forKey: .isError)
             self = .toolResult(toolId: toolId, result: result, isError: isError)
         case "session_started":
@@ -161,7 +177,7 @@ enum AgentEvent: Decodable {
 
 // MARK: - AnyCodableValue (for untyped JSON results)
 
-enum AnyCodableValue: Decodable {
+enum AnyCodableValue: Decodable, Equatable {
     case string(String)
     case number(Double)
     case bool(Bool)
