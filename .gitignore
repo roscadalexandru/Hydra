@@ -1,0 +1,13 @@
+# macOS
+.DS_Store
+
+# Xcode user data
+*.xcuserstate
+xcuserdata/
+
+# Build
+DerivedData/
+build/
+
+# Node sidecar (future)
+node_modules/
