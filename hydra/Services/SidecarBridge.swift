@@ -280,6 +280,25 @@ final class SidecarBridge {
     }
 }
 
+// MARK: - ChatBridgeProtocol
+
+@MainActor
+protocol ChatBridgeProtocol: AnyObject {
+    var status: SidecarBridge.SessionStatus { get }
+    func startSession(
+        prompt: String,
+        workingDirectory: String,
+        systemPrompt: String?,
+        permissionMode: PermissionMode,
+        allowedTools: [String]?,
+        resumeSessionId: String?
+    ) -> AsyncThrowingStream<AgentEvent, Error>
+    func sendMessage(_ message: String) async throws
+    func cancel() async
+}
+
+extension SidecarBridge: ChatBridgeProtocol {}
+
 // MARK: - Errors
 
 enum SidecarBridgeError: Error, Equatable {
