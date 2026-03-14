@@ -90,6 +90,12 @@ struct ChatView: View {
             try? await sessionListViewModel.loadSessions()
             await loadProjects()
         }
+        .onChange(of: selectedProjectId) { _, newProjectId in
+            guard let session = viewModel.session else { return }
+            Task {
+                try? await sessionListViewModel.updateSessionProject(session, projectId: newProjectId)
+            }
+        }
     }
 
     private func createNewChat() {

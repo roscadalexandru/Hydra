@@ -161,6 +161,53 @@ final class ChatSessionListViewModelTests: XCTestCase {
         }
     }
 
+    // MARK: - Project Update
+
+    func testUpdateSessionProject() async throws {
+        let (vm, db, workspace) = try await makeViewModel()
+
+        var project = Project(workspaceId: workspace.id!, name: "MyApp", path: "/tmp/myapp")
+        try await db.dbWriter.write { dbConn in
+            try project.insert(dbConn)
+        }
+
+        try await db.dbWriter.write { dbConn in
+            var s = ChatSession(workspaceId: workspace.id!, title: "Chat")
+            try s.insert(dbConn)
+        }
+
+        try await vm.loadSessions()
+        let session = vm.sessions[0]
+        XCTAssertNil(session.projectId)
+
+        try await vm.updateSessionProject(session, projectId: project.id)
+
+        // Verify in-memory update
+        XCTAssertEqual(vm.sessions[0].projectId, project.id)
+
+        // Verify persisted
+        try await db.dbWriter.read { dbConn in
+            let fetched = try ChatSession.fetchOne(dbConn, key: session.id)
+            XCTAssertEqual(fetched?.projectId, project.id)
+        }
+    }
+
+    func testUpdateSessionProjectToNil() async throws {
+        let (vm, db, workspace) = try await makeViewModel()
+
+        var project = Project(workspaceId: workspace.id!, name: "MyApp", path: "/tmp/myapp")
+        try await db.dbWriter.write { dbConn in
+            try project.insert(dbConn)
+        }
+
+        let session = try await vm.createSession(projectId: project.id)
+        XCTAssertEqual(session.projectId, project.id)
+
+        try await vm.updateSessionProject(session, projectId: nil)
+
+        XCTAssertNil(vm.sessions[0].projectId)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel() async throws -> (ChatSessionListViewModel, AppDatabase, Workspace) {

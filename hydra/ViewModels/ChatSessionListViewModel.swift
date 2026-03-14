@@ -55,4 +55,15 @@ final class ChatSessionListViewModel {
         }
         sessions[index] = updated
     }
+
+    func updateSessionProject(_ session: ChatSession, projectId: Int64?) async throws {
+        guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
+        var updated = sessions[index]
+        updated.projectId = projectId
+        updated.updatedAt = Date()
+        try await database.dbWriter.write { db in
+            try updated.update(db)
+        }
+        sessions[index] = updated
+    }
 }
