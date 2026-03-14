@@ -1,6 +1,19 @@
 import Foundation
 
-final class SidecarProcess: @unchecked Sendable {
+// MARK: - Protocol
+
+protocol SidecarProcessProtocol: AnyObject, Sendable {
+    var events: AsyncStream<SidecarMessage> { get }
+    var isRunning: Bool { get }
+    func start() throws
+    @discardableResult
+    func send<P: Encodable>(method: String, params: P) throws -> Int
+    func terminate()
+}
+
+// MARK: - Implementation
+
+final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
 
     private let nodePath: String
     private let sidecarScript: String
