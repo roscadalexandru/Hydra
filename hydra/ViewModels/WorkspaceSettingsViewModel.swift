@@ -56,21 +56,20 @@ final class WorkspaceSettingsViewModel {
         let workspaceId = self.workspaceId
         Task.detached { [weak self] in
             do {
-                let isDuplicate = try await database.dbWriter.read { db in
-                    try Project
+                let inserted = try await database.dbWriter.write { db -> Bool in
+                    let exists = try Project
                         .filter(Project.Columns.workspaceId == workspaceId)
                         .filter(Project.Columns.path == path)
                         .fetchCount(db) > 0
+                    if exists { return false }
+                    var project = Project(workspaceId: workspaceId, name: name, path: path)
+                    try project.insert(db)
+                    return true
                 }
-                if isDuplicate {
+                if !inserted {
                     await MainActor.run {
                         self?.errorMessage = "A project at \"\(path)\" already exists in this workspace."
                     }
-                    return
-                }
-                try await database.dbWriter.write { db in
-                    var project = Project(workspaceId: workspaceId, name: name, path: path)
-                    try project.insert(db)
                 }
             } catch {
                 await MainActor.run {

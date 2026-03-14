@@ -100,8 +100,8 @@ struct WorkspaceSettingsView: View {
 
     private func commitName() {
         let trimmed = editedName.trimmingCharacters(in: .whitespaces)
-        guard didLoadInitialValues, !trimmed.isEmpty, editedName != viewModel.workspace?.name else { return }
-        viewModel.updateWorkspace(name: editedName)
+        guard didLoadInitialValues, !trimmed.isEmpty, trimmed != viewModel.workspace?.name else { return }
+        viewModel.updateWorkspace(name: trimmed)
     }
 
     private func commitDescription() {
