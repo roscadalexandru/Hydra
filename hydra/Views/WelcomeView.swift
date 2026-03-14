@@ -77,6 +77,7 @@ struct WelcomeView: View {
     @State private var showingCreate = false
     @State private var newWorkspaceName = ""
     @State private var workspaceToDelete: Workspace?
+    @State private var openWorkspaceIds: Set<Int64> = []
 
     var body: some View {
         VStack(spacing: 0) {
@@ -182,6 +183,8 @@ struct WelcomeView: View {
     }
 
     private func openWorkspace(_ id: Int64) {
+        guard !openWorkspaceIds.contains(id) else { return }
+        openWorkspaceIds.insert(id)
         viewModel.updateLastOpened(id)
         openWindow(value: id)
         dismissWindow(id: "welcome")

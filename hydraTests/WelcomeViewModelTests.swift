@@ -69,8 +69,9 @@ final class WelcomeViewModelTests: XCTestCase {
         }
         XCTAssertNil(workspace.lastOpenedAt)
 
+        let workspaceId = try XCTUnwrap(workspace.id)
         let vm = WelcomeViewModel(database: db)
-        vm.updateLastOpened(workspace.id!)
+        vm.updateLastOpened(workspaceId)
 
         let fetched = try db.dbWriter.read { dbConn in
             try Workspace.fetchOne(dbConn, key: workspace.id)
@@ -85,8 +86,9 @@ final class WelcomeViewModelTests: XCTestCase {
             try workspace.insert(dbConn)
         }
 
+        let workspaceId = try XCTUnwrap(workspace.id)
         let vm = WelcomeViewModel(database: db)
-        vm.deleteWorkspace(workspace.id!)
+        vm.deleteWorkspace(workspaceId)
 
         let count = try db.dbWriter.read { dbConn in
             try Workspace.fetchCount(dbConn)
