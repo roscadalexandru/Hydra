@@ -70,6 +70,14 @@ enum SidecarMessage: Decodable {
             let response = try RpcResponse(from: decoder)
             self = .response(response)
         } else if container.contains(.method) {
+            guard container.contains(.params) else {
+                throw DecodingError.dataCorrupted(
+                    DecodingError.Context(
+                        codingPath: decoder.codingPath,
+                        debugDescription: "Event notification is missing required 'params' field"
+                    )
+                )
+            }
             let params = try container.decode(StreamNotification.self, forKey: .params)
             self = .event(params)
         } else {
@@ -155,8 +163,7 @@ enum AgentEvent: Decodable {
 
 enum AnyCodableValue: Decodable {
     case string(String)
-    case int(Int)
-    case double(Double)
+    case number(Double)
     case bool(Bool)
     case dictionary([String: AnyCodableValue])
     case array([AnyCodableValue])
@@ -166,10 +173,10 @@ enum AnyCodableValue: Decodable {
         let container = try decoder.singleValueContainer()
         if let val = try? container.decode(Bool.self) {
             self = .bool(val)
-        } else if let val = try? container.decode(Int.self) {
-            self = .int(val)
         } else if let val = try? container.decode(Double.self) {
-            self = .double(val)
+            // JSON numbers are IEEE 754 doubles — decode as Double to preserve
+            // fidelity for values like 1.0 vs 1 (indistinguishable to JSONDecoder)
+            self = .number(val)
         } else if let val = try? container.decode(String.self) {
             self = .string(val)
         } else if let val = try? container.decode([String: AnyCodableValue].self) {

@@ -315,6 +315,80 @@ final class SidecarProtocolTests: XCTestCase {
         }
     }
 
+    // MARK: - AnyCodableValue fidelity
+
+    func testAnyCodableValueDecodesWholeNumberAsNumber() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":1,"result":1.0}
+        """.data(using: .utf8)!
+
+        let response = try decoder.decode(RpcResponse.self, from: json)
+
+        if case .number(let val) = response.result {
+            XCTAssertEqual(val, 1.0)
+        } else {
+            XCTFail("Expected .number(1.0), got \(String(describing: response.result))")
+        }
+    }
+
+    func testAnyCodableValueDecodesFractionalNumberAsNumber() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":1,"result":3.14}
+        """.data(using: .utf8)!
+
+        let response = try decoder.decode(RpcResponse.self, from: json)
+
+        if case .number(let val) = response.result {
+            XCTAssertEqual(val, 3.14)
+        } else {
+            XCTFail("Expected .number(3.14), got \(String(describing: response.result))")
+        }
+    }
+
+    func testAnyCodableValueDecodesIntegerAsNumber() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":1,"result":42}
+        """.data(using: .utf8)!
+
+        let response = try decoder.decode(RpcResponse.self, from: json)
+
+        if case .number(let val) = response.result {
+            XCTAssertEqual(val, 42.0)
+        } else {
+            XCTFail("Expected .number(42.0), got \(String(describing: response.result))")
+        }
+    }
+
+    func testAnyCodableValueDecodesBoolAsBool() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":1,"result":true}
+        """.data(using: .utf8)!
+
+        let response = try decoder.decode(RpcResponse.self, from: json)
+
+        if case .bool(let val) = response.result {
+            XCTAssertTrue(val)
+        } else {
+            XCTFail("Expected .bool(true), got \(String(describing: response.result))")
+        }
+    }
+
+    // MARK: - SidecarMessage missing params
+
+    func testSidecarMessageEventWithoutParamsThrowsDescriptiveError() {
+        let json = """
+        {"jsonrpc":"2.0","method":"event"}
+        """.data(using: .utf8)!
+
+        XCTAssertThrowsError(try decoder.decode(SidecarMessage.self, from: json)) { error in
+            guard case DecodingError.dataCorrupted(let context) = error else {
+                XCTFail("Expected dataCorrupted, got \(error)")
+                return
+            }
+            XCTAssertTrue(context.debugDescription.contains("params"), "Error should mention missing 'params'")
+        }
+    }
+
     func testAgentEventFailsOnUnknownType() {
         let json = """
         {"type":"unknown_event","data":"foo"}
