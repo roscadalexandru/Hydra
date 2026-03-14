@@ -54,12 +54,15 @@ export class Session {
         this.#translateMessage(msg, onEvent);
       }
     } catch (err) {
-      onEvent({
-        type: "session_error",
-        durationMs: 0,
-        costUsd: 0,
-        errors: [err.message],
-      });
+      // If #query is null, cancel() was called — suppress the error
+      if (this.#query !== null) {
+        onEvent({
+          type: "session_error",
+          durationMs: 0,
+          costUsd: 0,
+          errors: [err.message],
+        });
+      }
     } finally {
       this.#query = null;
     }
