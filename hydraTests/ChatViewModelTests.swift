@@ -178,7 +178,7 @@ final class ChatViewModelTests: XCTestCase {
         let (vm, _, db) = try makeViewModel()
 
         // Create a session with messages in the DB using the test workspace
-        let session = try makeSessionWithMessages(
+        let session = try await makeSessionWithMessages(
             db: db, workspaceId: testWorkspaceId, sdkSessionId: "sdk-prev", title: "Previous Chat",
             messages: [
                 (role: .user, content: "Hello"),
@@ -200,7 +200,7 @@ final class ChatViewModelTests: XCTestCase {
     func testLoadExistingSessionSetsNextOrderIndex() async throws {
         let (vm, _, db) = try makeViewModel()
 
-        let session = try makeSessionWithMessages(
+        let session = try await makeSessionWithMessages(
             db: db, workspaceId: testWorkspaceId,
             messages: [
                 (role: .user, content: "Hello"),
@@ -225,7 +225,7 @@ final class ChatViewModelTests: XCTestCase {
     func testSendInExistingSessionPassesResumeSessionId() async throws {
         let (vm, mock, db) = try makeViewModel()
 
-        let session = try makeSessionWithMessages(
+        let session = try await makeSessionWithMessages(
             db: db, workspaceId: testWorkspaceId, sdkSessionId: "sdk-to-resume",
             messages: []
         )
@@ -337,9 +337,9 @@ final class ChatViewModelTests: XCTestCase {
         sdkSessionId: String? = nil,
         title: String = "New Chat",
         messages: [(role: ChatMessage.Role, content: String)]
-    ) throws -> ChatSession {
+    ) async throws -> ChatSession {
         var session = ChatSession(workspaceId: workspaceId, sdkSessionId: sdkSessionId, title: title)
-        try db.dbWriter.write { dbConn in
+        try await db.dbWriter.write { dbConn in
             try session.insert(dbConn)
             for (index, msg) in messages.enumerated() {
                 var chatMsg = ChatMessage(chatSessionId: session.id!, orderIndex: index, role: msg.role, content: msg.content)

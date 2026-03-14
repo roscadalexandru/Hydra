@@ -4,6 +4,8 @@ import GRDB
 @Observable
 @MainActor
 final class ChatSessionListViewModel {
+    nonisolated deinit { }
+
     var sessions: [ChatSession] = []
     var selectedSessionId: Int64?
 

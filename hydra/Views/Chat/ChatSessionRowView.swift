@@ -49,9 +49,13 @@ struct ChatSessionRowView: View {
         }
     }
 
-    private var relativeTimestamp: String {
+    private static let timestampFormatter: RelativeDateTimeFormatter = {
         let formatter = RelativeDateTimeFormatter()
         formatter.unitsStyle = .abbreviated
-        return formatter.localizedString(for: session.updatedAt, relativeTo: Date())
+        return formatter
+    }()
+
+    private var relativeTimestamp: String {
+        Self.timestampFormatter.localizedString(for: session.updatedAt, relativeTo: Date())
     }
 }
