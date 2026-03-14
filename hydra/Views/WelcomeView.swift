@@ -73,9 +73,10 @@ final class WelcomeViewModel {
 struct WelcomeView: View {
     @State private var viewModel = WelcomeViewModel()
     @Environment(\.openWindow) private var openWindow
-    @Environment(\.dismiss) private var dismiss
+    @Environment(\.dismissWindow) private var dismissWindow
     @State private var showingCreate = false
     @State private var newWorkspaceName = ""
+    @State private var workspaceToDelete: Workspace?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -86,6 +87,27 @@ struct WelcomeView: View {
         }
         .sheet(isPresented: $showingCreate) {
             createSheet
+        }
+        .alert(
+            "Delete Workspace",
+            isPresented: Binding(
+                get: { workspaceToDelete != nil },
+                set: { if !$0 { workspaceToDelete = nil } }
+            )
+        ) {
+            Button("Cancel", role: .cancel) {
+                workspaceToDelete = nil
+            }
+            Button("Delete", role: .destructive) {
+                if let id = workspaceToDelete?.id {
+                    viewModel.deleteWorkspace(id)
+                }
+                workspaceToDelete = nil
+            }
+        } message: {
+            if let workspace = workspaceToDelete {
+                Text("Are you sure you want to delete \"\(workspace.name)\"? All projects, epics, and issues in this workspace will be permanently deleted.")
+            }
         }
     }
 
@@ -107,11 +129,13 @@ struct WelcomeView: View {
             WorkspaceRow(workspace: workspace)
                 .contentShape(Rectangle())
                 .onTapGesture(count: 2) {
-                    openWorkspace(workspace.id!)
+                    if let id = workspace.id {
+                        openWorkspace(id)
+                    }
                 }
                 .contextMenu {
                     Button("Delete", role: .destructive) {
-                        viewModel.deleteWorkspace(workspace.id!)
+                        workspaceToDelete = workspace
                     }
                 }
         }
@@ -160,7 +184,7 @@ struct WelcomeView: View {
     private func openWorkspace(_ id: Int64) {
         viewModel.updateLastOpened(id)
         openWindow(value: id)
-        dismiss()
+        dismissWindow(id: "welcome")
     }
 }
 

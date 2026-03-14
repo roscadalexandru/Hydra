@@ -15,11 +15,9 @@ final class WelcomeViewModelTests: XCTestCase {
 
         let vm = WelcomeViewModel(database: db)
 
-        let expectation = expectation(description: "workspaces observed")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        let pred = NSPredicate { _, _ in vm.workspaces.count == 2 }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
         XCTAssertEqual(vm.workspaces.count, 2)
     }
@@ -39,11 +37,9 @@ final class WelcomeViewModelTests: XCTestCase {
 
         let vm = WelcomeViewModel(database: db)
 
-        let expectation = expectation(description: "workspaces observed")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        let pred = NSPredicate { _, _ in vm.workspaces.count == 3 }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
         XCTAssertEqual(vm.workspaces.count, 3)
         XCTAssertEqual(vm.workspaces[0].name, "Recent")

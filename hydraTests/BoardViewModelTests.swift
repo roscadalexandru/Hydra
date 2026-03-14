@@ -13,12 +13,9 @@ final class BoardViewModelTests: XCTestCase {
 
         let vm = BoardViewModel(workspaceId: workspace.id!, database: db)
 
-        // Give ValueObservation time to deliver
-        let expectation = expectation(description: "issues observed")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        let pred = NSPredicate { _, _ in vm.issues.count == 0 }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
         XCTAssertEqual(vm.issues.count, 0)
     }
@@ -33,11 +30,9 @@ final class BoardViewModelTests: XCTestCase {
         let vm = BoardViewModel(workspaceId: workspace.id!, database: db)
         vm.createIssue(title: "My Task")
 
-        let expectation = expectation(description: "issue observed")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        let pred = NSPredicate { _, _ in vm.issues.count == 1 }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
         XCTAssertEqual(vm.issues.count, 1)
         XCTAssertEqual(vm.issues.first?.title, "My Task")
@@ -59,11 +54,9 @@ final class BoardViewModelTests: XCTestCase {
 
         let vm = BoardViewModel(workspaceId: ws1.id!, database: db)
 
-        let expectation = expectation(description: "issues observed")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.1) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 1.0)
+        let pred = NSPredicate { _, _ in vm.issues.count == 1 }
+        let exp = XCTNSPredicateExpectation(predicate: pred, object: nil)
+        wait(for: [exp], timeout: 2.0)
 
         XCTAssertEqual(vm.issues.count, 1)
         XCTAssertEqual(vm.issues.first?.title, "WS1 Issue")

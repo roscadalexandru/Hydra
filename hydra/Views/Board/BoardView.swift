@@ -1,7 +1,6 @@
 import SwiftUI
 
 struct BoardView: View {
-    let workspaceId: Int64
     @State private var viewModel: BoardViewModel
     @State private var showingNewIssue = false
     @State private var newIssueTitle = ""
@@ -9,7 +8,6 @@ struct BoardView: View {
     @State private var selectedIssue: Issue?
 
     init(workspaceId: Int64) {
-        self.workspaceId = workspaceId
         self._viewModel = State(initialValue: BoardViewModel(workspaceId: workspaceId))
     }
 
