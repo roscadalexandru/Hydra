@@ -6,6 +6,7 @@ struct ChatSession: Identifiable, Codable, Equatable, FetchableRecord, MutablePe
 
     var id: Int64?
     var workspaceId: Int64
+    var projectId: Int64?
     var issueId: Int64?
     var sdkSessionId: String?
     var status: Status
@@ -25,6 +26,7 @@ struct ChatSession: Identifiable, Codable, Equatable, FetchableRecord, MutablePe
     enum Columns {
         static let id = Column(CodingKeys.id)
         static let workspaceId = Column(CodingKeys.workspaceId)
+        static let projectId = Column(CodingKeys.projectId)
         static let issueId = Column(CodingKeys.issueId)
         static let status = Column(CodingKeys.status)
         static let createdAt = Column(CodingKeys.createdAt)
@@ -34,6 +36,7 @@ struct ChatSession: Identifiable, Codable, Equatable, FetchableRecord, MutablePe
     init(
         id: Int64? = nil,
         workspaceId: Int64,
+        projectId: Int64? = nil,
         issueId: Int64? = nil,
         sdkSessionId: String? = nil,
         status: Status = .active,
@@ -45,6 +48,7 @@ struct ChatSession: Identifiable, Codable, Equatable, FetchableRecord, MutablePe
     ) {
         self.id = id
         self.workspaceId = workspaceId
+        self.projectId = projectId
         self.issueId = issueId
         self.sdkSessionId = sdkSessionId
         self.status = status
@@ -53,6 +57,25 @@ struct ChatSession: Identifiable, Codable, Equatable, FetchableRecord, MutablePe
         self.totalDurationMs = totalDurationMs
         self.createdAt = createdAt
         self.updatedAt = updatedAt
+    }
+
+    // MARK: - Queries
+
+    static func fetchAllForWorkspace(_ db: Database, workspaceId: Int64) throws -> [ChatSession] {
+        try ChatSession
+            .filter(Columns.workspaceId == workspaceId)
+            .order(Columns.updatedAt.desc)
+            .fetchAll(db)
+    }
+
+    // MARK: - Title Generation
+
+    static func generateTitle(from message: String) -> String {
+        let trimmed = message.trimmingCharacters(in: .whitespaces)
+        if trimmed.count <= 50 {
+            return trimmed
+        }
+        return String(trimmed.prefix(50)) + "..."
     }
 
     mutating func didInsert(_ inserted: InsertionSuccess) {
