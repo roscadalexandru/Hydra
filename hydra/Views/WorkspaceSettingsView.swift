@@ -61,18 +61,11 @@ struct WorkspaceSettingsView: View {
     private var generalTab: some View {
         Form {
             TextField("Name", text: $editedName)
-                .onSubmit { viewModel.updateWorkspace(name: editedName) }
-                .onChange(of: editedName) { _, newValue in
-                    guard didLoadInitialValues else { return }
-                    viewModel.updateWorkspace(name: newValue)
-                }
+                .onSubmit { commitName() }
 
             TextField("Description", text: $editedDescription, axis: .vertical)
                 .lineLimit(3...6)
-                .onChange(of: editedDescription) { _, newValue in
-                    guard didLoadInitialValues else { return }
-                    viewModel.updateWorkspace(description: newValue)
-                }
+                .onSubmit { commitDescription() }
 
             Picker("Default Autonomy Mode", selection: $editedAutonomyMode) {
                 ForEach(Workspace.AutonomyMode.allCases, id: \.self) { mode in
@@ -86,6 +79,20 @@ struct WorkspaceSettingsView: View {
         }
         .formStyle(.grouped)
         .padding()
+        .onDisappear {
+            commitName()
+            commitDescription()
+        }
+    }
+
+    private func commitName() {
+        guard didLoadInitialValues, editedName != viewModel.workspace?.name else { return }
+        viewModel.updateWorkspace(name: editedName)
+    }
+
+    private func commitDescription() {
+        guard didLoadInitialValues, editedDescription != viewModel.workspace?.description else { return }
+        viewModel.updateWorkspace(description: editedDescription)
     }
 
     // MARK: - Projects Tab
