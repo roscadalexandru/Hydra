@@ -9,9 +9,21 @@ final class SidecarProcessTests: XCTestCase {
         return projectRoot.appendingPathComponent("sidecar/src/index.js").path
     }
 
+    private func skipIfSidecarUnavailable() throws {
+        guard FileManager.default.fileExists(atPath: sidecarScript) else {
+            throw XCTSkip("Sidecar script not found at \(sidecarScript)")
+        }
+        let nodePath = ["/opt/homebrew/bin/node", "/usr/local/bin/node"]
+            .first { FileManager.default.fileExists(atPath: $0) }
+        guard nodePath != nil else {
+            throw XCTSkip("Node.js not found")
+        }
+    }
+
     // MARK: - Initial State
 
-    func testInitialStateIsNotRunning() {
+    func testInitialStateIsNotRunning() throws {
+        try skipIfSidecarUnavailable()
         let process = SidecarProcess(sidecarScript: sidecarScript)
         XCTAssertFalse(process.isRunning)
     }
@@ -19,15 +31,27 @@ final class SidecarProcessTests: XCTestCase {
     // MARK: - Start
 
     func testStartMakesProcessRunning() throws {
+        try skipIfSidecarUnavailable()
         let sidecar = SidecarProcess(sidecarScript: sidecarScript)
         try sidecar.start()
         XCTAssertTrue(sidecar.isRunning)
         sidecar.terminate()
     }
 
+    func testStartTwiceThrows() throws {
+        try skipIfSidecarUnavailable()
+        let sidecar = SidecarProcess(sidecarScript: sidecarScript)
+        try sidecar.start()
+        XCTAssertThrowsError(try sidecar.start()) { error in
+            XCTAssertTrue(error is SidecarProcessError)
+        }
+        sidecar.terminate()
+    }
+
     // MARK: - Send
 
     func testSendReturnsIncrementingRequestIds() throws {
+        try skipIfSidecarUnavailable()
         let sidecar = SidecarProcess(sidecarScript: sidecarScript)
         try sidecar.start()
 
@@ -49,6 +73,7 @@ final class SidecarProcessTests: XCTestCase {
     // MARK: - Events
 
     func testEventsStreamYieldsResponseFromEchoSidecar() async throws {
+        try skipIfSidecarUnavailable()
         let sidecar = SidecarProcess(sidecarScript: sidecarScript)
         try sidecar.start()
 
@@ -71,6 +96,7 @@ final class SidecarProcessTests: XCTestCase {
     }
 
     func testMultipleCommandsYieldCorrespondingResponses() async throws {
+        try skipIfSidecarUnavailable()
         let sidecar = SidecarProcess(sidecarScript: sidecarScript)
         try sidecar.start()
 
@@ -96,6 +122,41 @@ final class SidecarProcessTests: XCTestCase {
         sidecar.terminate()
     }
 
+    // MARK: - Terminate
+
+    func testTerminateMakesProcessNotRunning() throws {
+        try skipIfSidecarUnavailable()
+        let sidecar = SidecarProcess(sidecarScript: sidecarScript)
+        try sidecar.start()
+        XCTAssertTrue(sidecar.isRunning)
+
+        sidecar.terminate()
+
+        try waitUntil(timeout: 5) { !sidecar.isRunning }
+        XCTAssertFalse(sidecar.isRunning)
+    }
+
+    func testTerminateOnNonStartedProcessIsNoOp() throws {
+        try skipIfSidecarUnavailable()
+        let sidecar = SidecarProcess(sidecarScript: sidecarScript)
+        sidecar.terminate() // should not crash
+        XCTAssertFalse(sidecar.isRunning)
+    }
+
+    // MARK: - IsRunning reflects actual process state
+
+    func testIsRunningBecomesFalseAfterProcessExits() throws {
+        try skipIfSidecarUnavailable()
+        let sidecar = SidecarProcess(sidecarScript: sidecarScript)
+        try sidecar.start()
+
+        // Send shutdown command — echo sidecar exits on shutdown
+        let _ = try sidecar.send(method: "shutdown", params: [String: String]())
+
+        try waitUntil(timeout: 5) { !sidecar.isRunning }
+        XCTAssertFalse(sidecar.isRunning)
+    }
+
     // MARK: - Helpers
 
     private func collectEvents(
@@ -116,54 +177,21 @@ final class SidecarProcessTests: XCTestCase {
                 try await Task.sleep(nanoseconds: seconds * 1_000_000_000)
                 throw SidecarTestError.timeout
             }
-            let result = try await group.next()!
+            let result = try await group.next() ?? []
             group.cancelAll()
             return result
         }
     }
 
-    // MARK: - Terminate
-
-    func testTerminateMakesProcessNotRunning() throws {
-        let sidecar = SidecarProcess(sidecarScript: sidecarScript)
-        try sidecar.start()
-        XCTAssertTrue(sidecar.isRunning)
-
-        sidecar.terminate()
-
-        // Give process time to exit
-        let expectation = expectation(description: "process terminates")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            expectation.fulfill()
+    private func waitUntil(timeout: TimeInterval, condition: @escaping () -> Bool) throws {
+        let deadline = Date().addingTimeInterval(timeout)
+        while !condition() {
+            guard Date() < deadline else {
+                XCTFail("Timed out waiting for condition")
+                return
+            }
+            RunLoop.current.run(until: Date().addingTimeInterval(0.1))
         }
-        wait(for: [expectation], timeout: 5)
-
-        XCTAssertFalse(sidecar.isRunning)
-    }
-
-    func testTerminateOnNonStartedProcessIsNoOp() {
-        let sidecar = SidecarProcess(sidecarScript: sidecarScript)
-        sidecar.terminate() // should not crash
-        XCTAssertFalse(sidecar.isRunning)
-    }
-
-    // MARK: - IsRunning reflects actual process state
-
-    func testIsRunningBecomesFalseAfterProcessExits() async throws {
-        let sidecar = SidecarProcess(sidecarScript: sidecarScript)
-        try sidecar.start()
-
-        // Send shutdown command — echo sidecar exits on shutdown
-        let _ = try sidecar.send(method: "shutdown", params: [String: String]())
-
-        // Wait for process to exit
-        let expectation = expectation(description: "process exits after shutdown")
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2) {
-            expectation.fulfill()
-        }
-        wait(for: [expectation], timeout: 5)
-
-        XCTAssertFalse(sidecar.isRunning)
     }
 }
 

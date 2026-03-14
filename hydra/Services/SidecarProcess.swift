@@ -7,8 +7,6 @@ final class SidecarProcess: @unchecked Sendable {
     private let lock = NSLock()
     private var process: Process?
     private var stdinPipe: Pipe?
-    private var stdoutPipe: Pipe?
-    private var stderrPipe: Pipe?
     private var nextRequestId = 1
     private let encoder: JSONEncoder = {
         let e = JSONEncoder()
@@ -42,8 +40,11 @@ final class SidecarProcess: @unchecked Sendable {
     deinit {
         // Don't finish the continuation here — readStdout owns that via EOF.
         // Just force-kill the process if still running.
-        if let process = process, process.isRunning {
-            process.terminate()
+        lock.lock()
+        let proc = process
+        lock.unlock()
+        if let proc = proc, proc.isRunning {
+            proc.terminate()
         }
     }
 
@@ -51,21 +52,26 @@ final class SidecarProcess: @unchecked Sendable {
         lock.lock()
         defer { lock.unlock() }
 
+        guard process == nil else {
+            throw SidecarProcessError.alreadyRunning
+        }
+
         let proc = Process()
         let stdin = Pipe()
         let stdout = Pipe()
-        let stderr = Pipe()
 
         proc.executableURL = URL(fileURLWithPath: nodePath)
         proc.arguments = [sidecarScript]
         proc.standardInput = stdin
         proc.standardOutput = stdout
-        proc.standardError = stderr
+        // Inherit parent's stderr — avoids 64KB pipe buffer deadlock
+        // since we don't need to capture sidecar stderr programmatically
 
         self.process = proc
         self.stdinPipe = stdin
-        self.stdoutPipe = stdout
-        self.stderrPipe = stderr
+
+        // Ignore SIGPIPE so broken-pipe writes throw instead of crashing
+        signal(SIGPIPE, SIG_IGN)
 
         try proc.run()
 
@@ -99,8 +105,8 @@ final class SidecarProcess: @unchecked Sendable {
         let request = RpcRequest(id: id, method: method, params: params)
         let data = try encoder.encode(request)
         let handle = stdinPipe.fileHandleForWriting
-        handle.write(data)
-        handle.write(Data("\n".utf8))
+        try handle.write(contentsOf: data)
+        try handle.write(contentsOf: Data("\n".utf8))
 
         return id
     }
@@ -193,4 +199,5 @@ final class SidecarProcess: @unchecked Sendable {
 
 enum SidecarProcessError: Error {
     case notRunning
+    case alreadyRunning
 }
