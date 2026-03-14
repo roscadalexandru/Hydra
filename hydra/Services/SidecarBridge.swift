@@ -2,6 +2,7 @@ import AppKit
 import Foundation
 
 @Observable
+@MainActor
 final class SidecarBridge {
 
     private(set) var sessionId: String?
@@ -17,12 +18,19 @@ final class SidecarBridge {
     }
 
     private let processFactory: @Sendable () -> any SidecarProcessProtocol
-    private var process: (any SidecarProcessProtocol)?
-    private var eventContinuation: AsyncThrowingStream<AgentEvent, Error>.Continuation?
-    private var eventStreamTask: Task<Void, Never>?
-    private var pendingResponses: [Int: CheckedContinuation<RpcResponse, Error>] = [:]
+
+    // Accessed from deinit (nonisolated) and notification callbacks.
+    // nonisolated(unsafe) allows cross-isolation access. Safety: during
+    // normal operation all access is serialized by @MainActor; during
+    // deinit exclusive access is guaranteed (no other references exist).
+    nonisolated(unsafe) private var process: (any SidecarProcessProtocol)?
+    nonisolated(unsafe) private var eventContinuation:
+        AsyncThrowingStream<AgentEvent, Error>.Continuation?
+    nonisolated(unsafe) private var eventStreamTask: Task<Void, Never>?
+    nonisolated(unsafe) private var pendingResponses:
+        [Int: CheckedContinuation<RpcResponse, Error>] = [:]
     private let lock = NSLock()
-    private var terminationObserver: Any?
+    nonisolated(unsafe) private var terminationObserver: Any?
 
     init(processFactory: @escaping @Sendable () -> any SidecarProcessProtocol) {
         self.processFactory = processFactory
@@ -37,10 +45,7 @@ final class SidecarBridge {
         if let observer = terminationObserver {
             NotificationCenter.default.removeObserver(observer)
         }
-        eventStreamTask?.cancel()
-        process?.terminate()
-        finishEventStream()
-        failPendingResponses(with: SidecarBridgeError.shutdown)
+        performCleanup()
     }
 
     // MARK: - Public API
@@ -73,7 +78,7 @@ final class SidecarBridge {
             }
 
             do {
-                if self.process == nil || !self.process!.isRunning {
+                if !(self.process?.isRunning == true) {
                     let proc = self.processFactory()
                     try proc.start()
                     self.process = proc
@@ -95,11 +100,14 @@ final class SidecarBridge {
                 )
                 if case .failure(let rpcError) = response.outcome {
                     self.status = .error(rpcError.message)
+                    self.sessionId = nil
                     self.eventContinuation = nil
                     continuation.finish(throwing: rpcError)
                 }
             } catch {
                 self.status = .error(error.localizedDescription)
+                self.sessionId = nil
+                self.eventContinuation = nil
                 continuation.finish(throwing: error)
             }
         }
@@ -108,7 +116,7 @@ final class SidecarBridge {
     }
 
     func sendMessage(_ message: String) async throws {
-        guard let sessionId, process?.isRunning == true else {
+        guard status == .running, let sessionId, process?.isRunning == true else {
             throw SidecarBridgeError.noActiveSession
         }
 
@@ -120,7 +128,9 @@ final class SidecarBridge {
     }
 
     func cancel() async {
-        guard let sessionId, process?.isRunning == true else { return }
+        guard status == .running, let sessionId, process?.isRunning == true else {
+            return
+        }
 
         status = .cancelling
         let params = CancelSessionParams(sessionId: sessionId)
@@ -128,12 +138,7 @@ final class SidecarBridge {
     }
 
     func shutdown() {
-        eventStreamTask?.cancel()
-        eventStreamTask = nil
-        process?.terminate()
-        process = nil
-        finishEventStream()
-        failPendingResponses(with: SidecarBridgeError.shutdown)
+        performCleanup()
         sessionId = nil
         sdkSessionId = nil
         status = .idle
@@ -222,20 +227,16 @@ final class SidecarBridge {
         guard let process else { throw SidecarBridgeError.noActiveSession }
 
         return try await withCheckedThrowingContinuation { continuation in
+            lock.lock()
             do {
                 let requestId = try process.send(method: method, params: params)
-                lock.lock()
                 pendingResponses[requestId] = continuation
                 lock.unlock()
             } catch {
+                lock.unlock()
                 continuation.resume(throwing: error)
             }
         }
-    }
-
-    private func finishEventStream() {
-        eventContinuation?.finish()
-        eventContinuation = nil
     }
 
     private func failPendingResponses(with error: Error) {
@@ -249,13 +250,32 @@ final class SidecarBridge {
         }
     }
 
+    /// Non-isolated cleanup: cancels tasks, terminates process, and resumes
+    /// pending continuations. Safe to call from deinit and notification handlers.
+    nonisolated private func performCleanup() {
+        eventStreamTask?.cancel()
+        eventStreamTask = nil
+        process?.terminate()
+        process = nil
+        eventContinuation?.finish()
+        eventContinuation = nil
+
+        lock.lock()
+        let pending = pendingResponses
+        pendingResponses.removeAll()
+        lock.unlock()
+        for (_, cont) in pending {
+            cont.resume(throwing: SidecarBridgeError.shutdown)
+        }
+    }
+
     private func observeAppTermination() {
         terminationObserver = NotificationCenter.default.addObserver(
             forName: NSApplication.willTerminateNotification,
             object: nil,
             queue: .main
         ) { [weak self] _ in
-            self?.shutdown()
+            self?.performCleanup()
         }
     }
 }

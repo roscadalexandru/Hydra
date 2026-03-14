@@ -1,6 +1,7 @@
 import XCTest
 @testable import hydra
 
+@MainActor
 final class SidecarBridgeTests: XCTestCase {
 
     // MARK: - Initial State
