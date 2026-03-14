@@ -5,9 +5,9 @@
   "type": "module",
   "scripts": {
     "start": "node src/index.js",
-    "test": "node --test src/**/*.test.js"
+    "test": "node --test 'src/**/*.test.js'"
   },
   "dependencies": {
-    "@anthropic-ai/claude-agent-sdk": "latest"
+    "@anthropic-ai/claude-agent-sdk": "^0.2.76"
   }
 }

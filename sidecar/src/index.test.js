@@ -148,6 +148,67 @@ describe("sidecar index", () => {
     assert.equal(ack.result.sessionId, "test-123");
   });
 
+  it("returns -32600 for valid JSON with missing required fields", async () => {
+    const responses = await sendCommands([
+      { jsonrpc: "2.0", id: 1, method: "start_session", params: {} },
+      { jsonrpc: "2.0", id: 2, method: "shutdown", params: {} },
+    ]);
+    const errResp = responses.find((r) => r.id === 1);
+    assert.ok(errResp.error);
+    assert.equal(errResp.error.code, -32602);
+    assert.match(errResp.error.message, /sessionId/i);
+  });
+
+  it("returns -32602 for send_message with missing sessionId", async () => {
+    const responses = await sendCommands([
+      { jsonrpc: "2.0", id: 1, method: "send_message", params: { message: "hi" } },
+      { jsonrpc: "2.0", id: 2, method: "shutdown", params: {} },
+    ]);
+    const errResp = responses.find((r) => r.id === 1);
+    assert.ok(errResp.error);
+    assert.equal(errResp.error.code, -32602);
+  });
+
+  it("returns -32602 for cancel_session with null params", async () => {
+    const responses = await sendCommands([
+      { jsonrpc: "2.0", id: 1, method: "cancel_session", params: null },
+      { jsonrpc: "2.0", id: 2, method: "shutdown", params: {} },
+    ]);
+    const errResp = responses.find((r) => r.id === 1);
+    assert.ok(errResp.error);
+    assert.equal(errResp.error.code, -32602);
+  });
+
+  it("returns -32600 for valid JSON missing jsonrpc field", async () => {
+    const proc = spawn("node", [INDEX_PATH], {
+      stdio: ["pipe", "pipe", "pipe"],
+    });
+
+    let stdout = "";
+    proc.stdout.on("data", (data) => {
+      stdout += data.toString();
+    });
+
+    const done = new Promise((resolve) => proc.on("close", resolve));
+
+    // Valid JSON but missing jsonrpc - should be -32600, not -32700
+    proc.stdin.write(JSON.stringify({ id: 1, method: "shutdown", params: {} }) + "\n");
+    proc.stdin.write(
+      JSON.stringify({ jsonrpc: "2.0", id: 99, method: "shutdown", params: {} }) + "\n"
+    );
+    proc.stdin.end();
+
+    await done;
+
+    const lines = stdout.trim().split("\n").filter(Boolean);
+    const responses = lines.map((l) => JSON.parse(l));
+
+    // parseCommand throws before extracting id, so id is null
+    const errResp = responses.find((r) => r.error && r.error.code === -32600);
+    assert.ok(errResp, "should have an error response with code -32600");
+    assert.equal(errResp.id, null);
+  });
+
   it("exits cleanly when stdin closes without shutdown", async () => {
     const proc = spawn("node", [INDEX_PATH], {
       stdio: ["pipe", "pipe", "pipe"],

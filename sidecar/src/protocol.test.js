@@ -1,6 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { parseCommand, formatResponse, formatError, formatEvent } from "./protocol.js";
+import {
+  parseCommand,
+  formatResponse,
+  formatError,
+  formatEvent,
+  ParseError,
+  InvalidRequestError,
+} from "./protocol.js";
 
 describe("parseCommand", () => {
   it("parses a valid shutdown command", () => {
@@ -31,34 +38,40 @@ describe("parseCommand", () => {
     assert.equal(result.params.sessionId, "abc-123");
   });
 
-  it("throws on malformed JSON", () => {
-    assert.throws(() => parseCommand("not json{"), {
-      message: /Invalid JSON/,
+  it("throws ParseError on malformed JSON", () => {
+    assert.throws(() => parseCommand("not json{"), (err) => {
+      assert.ok(err instanceof ParseError);
+      assert.match(err.message, /Invalid JSON/);
+      return true;
     });
   });
 
-  it("throws when jsonrpc field is missing", () => {
+  it("throws InvalidRequestError when jsonrpc field is missing", () => {
     const line = JSON.stringify({ id: 1, method: "shutdown", params: {} });
-    assert.throws(() => parseCommand(line), {
-      message: /jsonrpc/,
+    assert.throws(() => parseCommand(line), (err) => {
+      assert.ok(err instanceof InvalidRequestError);
+      assert.match(err.message, /jsonrpc/);
+      return true;
     });
   });
 
-  it("throws when method field is missing", () => {
+  it("throws InvalidRequestError when method field is missing", () => {
     const line = JSON.stringify({ jsonrpc: "2.0", id: 1, params: {} });
-    assert.throws(() => parseCommand(line), {
-      message: /method/,
+    assert.throws(() => parseCommand(line), (err) => {
+      assert.ok(err instanceof InvalidRequestError);
+      return true;
     });
   });
 
-  it("throws when id field is missing", () => {
+  it("throws InvalidRequestError when id field is missing", () => {
     const line = JSON.stringify({
       jsonrpc: "2.0",
       method: "shutdown",
       params: {},
     });
-    assert.throws(() => parseCommand(line), {
-      message: /id/,
+    assert.throws(() => parseCommand(line), (err) => {
+      assert.ok(err instanceof InvalidRequestError);
+      return true;
     });
   });
 });

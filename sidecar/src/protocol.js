@@ -1,5 +1,20 @@
+export class ParseError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "ParseError";
+  }
+}
+
+export class InvalidRequestError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "InvalidRequestError";
+  }
+}
+
 /**
  * Parse a JSON-RPC command from a line of text.
+ * Throws ParseError for invalid JSON, InvalidRequestError for missing fields.
  * @param {string} line - Raw JSON string
  * @returns {object} Parsed command with jsonrpc, id, method, params
  */
@@ -8,17 +23,17 @@ export function parseCommand(line) {
   try {
     parsed = JSON.parse(line);
   } catch {
-    throw new Error("Invalid JSON: could not parse input");
+    throw new ParseError("Invalid JSON: could not parse input");
   }
 
   if (parsed.jsonrpc !== "2.0") {
-    throw new Error('Missing or invalid "jsonrpc" field');
+    throw new InvalidRequestError('Missing or invalid "jsonrpc" field');
   }
   if (typeof parsed.id !== "number") {
-    throw new Error('Missing or invalid "id" field');
+    throw new InvalidRequestError('Missing or invalid "id" field');
   }
   if (typeof parsed.method !== "string") {
-    throw new Error('Missing or invalid "method" field');
+    throw new InvalidRequestError('Missing or invalid "method" field');
   }
 
   return parsed;

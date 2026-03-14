@@ -1,5 +1,11 @@
 import { createInterface } from "node:readline";
-import { parseCommand, formatResponse, formatError } from "./protocol.js";
+import {
+  parseCommand,
+  formatResponse,
+  formatError,
+  ParseError,
+  InvalidRequestError,
+} from "./protocol.js";
 
 const rl = createInterface({ input: process.stdin });
 
@@ -7,9 +13,20 @@ function writeLine(obj) {
   process.stdout.write(JSON.stringify(obj) + "\n");
 }
 
+function requireParam(cmd, name) {
+  if (!cmd.params || cmd.params[name] == null) {
+    writeLine(
+      formatError(cmd.id, -32602, `Missing required param: ${name}`)
+    );
+    return false;
+  }
+  return true;
+}
+
 function handleCommand(cmd) {
   switch (cmd.method) {
     case "start_session":
+      if (!requireParam(cmd, "sessionId")) return;
       writeLine(
         formatResponse(cmd.id, {
           sessionId: cmd.params.sessionId,
@@ -19,6 +36,7 @@ function handleCommand(cmd) {
       break;
 
     case "send_message":
+      if (!requireParam(cmd, "sessionId")) return;
       writeLine(
         formatResponse(cmd.id, {
           sessionId: cmd.params.sessionId,
@@ -28,6 +46,7 @@ function handleCommand(cmd) {
       break;
 
     case "cancel_session":
+      if (!requireParam(cmd, "sessionId")) return;
       writeLine(
         formatResponse(cmd.id, {
           sessionId: cmd.params.sessionId,
@@ -54,7 +73,11 @@ rl.on("line", (line) => {
     const cmd = parseCommand(line);
     handleCommand(cmd);
   } catch (err) {
-    writeLine(formatError(null, -32700, err.message));
+    if (err instanceof InvalidRequestError) {
+      writeLine(formatError(null, -32600, err.message));
+    } else {
+      writeLine(formatError(null, -32700, err.message));
+    }
   }
 });
 
