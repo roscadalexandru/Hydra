@@ -3,6 +3,7 @@ import GRDB
 
 struct MainView: View {
     let workspaceId: Int64
+    @State private var showingSettings = false
 
     var body: some View {
         HSplitView {
@@ -16,6 +17,19 @@ struct MainView: View {
                 .frame(minWidth: 300, idealWidth: 400)
         }
         .frame(minWidth: 1000, minHeight: 600)
+        .toolbar {
+            ToolbarItem(placement: .primaryAction) {
+                Button {
+                    showingSettings = true
+                } label: {
+                    Image(systemName: "gear")
+                }
+                .help("Workspace Settings")
+            }
+        }
+        .sheet(isPresented: $showingSettings) {
+            WorkspaceSettingsView(workspaceId: workspaceId)
+        }
     }
 }
 
