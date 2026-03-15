@@ -13,14 +13,25 @@ final class ChatViewModel {
     var inputText: String = ""
     var session: ChatSession?
     var errorMessage: String?
+    var pendingPermissionRequest: PermissionRequestInfo?
     var projectId: Int64?
 
     var onSessionCreated: ((ChatSession) -> Void)?
+
+    struct PermissionRequestInfo: Equatable, Identifiable {
+        let requestId: String
+        let toolName: String
+        let description: String
+        let affectedPaths: [String]
+
+        var id: String { requestId }
+    }
 
     private let database: AppDatabase
     private var bridge: ChatBridgeProtocol
     private let workspaceId: Int64
     private let workingDirectory: String
+    private let additionalDirectories: [String]
     private var cancellable: AnyCancellable?
     private var streamTask: Task<Void, Never>?
     private var nextOrderIndex: Int = 0
@@ -30,12 +41,14 @@ final class ChatViewModel {
         database: AppDatabase = .shared,
         bridge: ChatBridgeProtocol,
         workspaceId: Int64,
-        workingDirectory: String
+        workingDirectory: String,
+        additionalDirectories: [String] = []
     ) {
         self.database = database
         self.bridge = bridge
         self.workspaceId = workspaceId
         self.workingDirectory = workingDirectory
+        self.additionalDirectories = additionalDirectories
     }
 
     // MARK: - Public
@@ -120,9 +133,27 @@ final class ChatViewModel {
             systemPrompt: nil,
             permissionMode: .default,
             allowedTools: nil,
-            resumeSessionId: session?.sdkSessionId
+            resumeSessionId: session?.sdkSessionId,
+            additionalDirectories: additionalDirectories.isEmpty ? nil : additionalDirectories
         )
         consumeStream(stream)
+    }
+
+    func respondToPermission(approved: Bool) {
+        // Guard prevents double-send: when the user taps Approve/Deny, we nil
+        // pendingPermissionRequest before SwiftUI's sheet binding setter fires.
+        // The setter also calls this method, but the guard returns early.
+        guard let request = pendingPermissionRequest else { return }
+        pendingPermissionRequest = nil
+        Task { [weak self] in
+            do {
+                try await self?.bridge.respondToPermission(requestId: request.requestId, approved: approved)
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.errorMessage = "Failed to send permission response: \(error.localizedDescription)"
+                }
+            }
+        }
     }
 
     func resetSession() {
@@ -178,6 +209,16 @@ final class ChatViewModel {
         case .toolResult(let toolId, let result, let isError):
             let resultJson = serializeAnyCodableValue(result)
             persistMessage(role: .toolResult, content: resultJson, toolId: toolId, isError: isError)
+
+        case .permissionRequest(let requestId, let toolName, let description, let affectedPaths):
+            // No queue needed: the Agent SDK blocks on each permission response
+            // before issuing the next request, so at most one is pending at a time.
+            pendingPermissionRequest = PermissionRequestInfo(
+                requestId: requestId,
+                toolName: toolName,
+                description: description,
+                affectedPaths: affectedPaths
+            )
 
         case .sessionComplete(let durationMs, let costUsd):
             session?.status = .completed

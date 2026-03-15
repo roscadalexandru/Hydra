@@ -11,6 +11,7 @@ export function fakeQuery(messages) {
     })();
     gen.interrupt = async () => {};
     gen.close = () => {};
+    gen.respondToPermission = async () => {};
     return gen;
   };
 }
@@ -59,6 +60,7 @@ export function createBlockingQuery() {
   let resolveBlock;
   let interruptCalled = false;
   let closeCalled = false;
+  let lastPermissionResponse = null;
 
   const queryFn = (_opts) => {
     const gen = (async function* () {
@@ -67,6 +69,9 @@ export function createBlockingQuery() {
     })();
     gen.interrupt = async () => { interruptCalled = true; };
     gen.close = () => { closeCalled = true; };
+    gen.respondToPermission = async (requestId, approved) => {
+      lastPermissionResponse = { requestId, approved };
+    };
     return gen;
   };
 
@@ -75,5 +80,6 @@ export function createBlockingQuery() {
     unblock: () => resolveBlock?.(),
     get interruptCalled() { return interruptCalled; },
     get closeCalled() { return closeCalled; },
+    get lastPermissionResponse() { return lastPermissionResponse; },
   };
 }

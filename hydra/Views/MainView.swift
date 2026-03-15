@@ -82,9 +82,17 @@ struct RightPane: View {
 
 struct ChatPane: View {
     let workspaceId: Int64
-    @State private var workingDirectory: String?
+    @State private var projectPaths: [String] = []
     @State private var bridge: SidecarBridge?
     @State private var projectCancellable: AnyCancellable?
+
+    private var workingDirectory: String {
+        projectPaths.first ?? NSHomeDirectory()
+    }
+
+    private var additionalDirectories: [String] {
+        Array(projectPaths.dropFirst())
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -93,7 +101,8 @@ struct ChatPane: View {
                 ChatView(
                     bridge: bridge,
                     workspaceId: workspaceId,
-                    workingDirectory: workingDirectory ?? NSHomeDirectory()
+                    workingDirectory: workingDirectory,
+                    additionalDirectories: additionalDirectories
                 )
             } else {
                 Text("Loading chat...")
@@ -102,28 +111,28 @@ struct ChatPane: View {
             }
         }
         .task {
-            observeFirstProject()
+            observeProjects()
             if bridge == nil {
                 bridge = SidecarBridge(sidecarScript: "sidecar/src/index.js")
             }
         }
     }
 
-    private func observeFirstProject() {
-        let observation = ValueObservation.tracking { db -> String? in
-            let project = try Project
+    private func observeProjects() {
+        let observation = ValueObservation.tracking { db -> [String] in
+            let projects = try Project
                 .filter(Project.Columns.workspaceId == workspaceId)
                 .order(Project.Columns.name)
-                .fetchOne(db)
-            return project?.path
+                .fetchAll(db)
+            return projects.map(\.path)
         }
 
         projectCancellable = observation
             .publisher(in: AppDatabase.shared.dbWriter, scheduling: .async(onQueue: .main))
             .sink(
                 receiveCompletion: { _ in },
-                receiveValue: { [self] dir in
-                    workingDirectory = dir
+                receiveValue: { [self] paths in
+                    projectPaths = paths
                 }
             )
     }

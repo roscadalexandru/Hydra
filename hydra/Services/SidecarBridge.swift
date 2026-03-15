@@ -56,7 +56,8 @@ final class SidecarBridge {
         systemPrompt: String? = nil,
         permissionMode: PermissionMode = .default,
         allowedTools: [String]? = nil,
-        resumeSessionId: String? = nil
+        resumeSessionId: String? = nil,
+        additionalDirectories: [String]? = nil
     ) -> AsyncThrowingStream<AgentEvent, Error> {
         guard status == .idle else {
             return AsyncThrowingStream {
@@ -92,7 +93,8 @@ final class SidecarBridge {
                     systemPrompt: systemPrompt,
                     permissionMode: permissionMode,
                     allowedTools: allowedTools,
-                    resumeSessionId: resumeSessionId
+                    resumeSessionId: resumeSessionId,
+                    additionalDirectories: additionalDirectories
                 )
 
                 let response = try await self.sendRpc(
@@ -122,6 +124,22 @@ final class SidecarBridge {
 
         let params = SendMessageParams(sessionId: sessionId, message: message)
         let response = try await sendRpc(method: "send_message", params: params)
+        if case .failure(let rpcError) = response.outcome {
+            throw rpcError
+        }
+    }
+
+    func respondToPermission(requestId: String, approved: Bool) async throws {
+        guard status == .running, let sessionId, process?.isRunning == true else {
+            throw SidecarBridgeError.noActiveSession
+        }
+
+        let params = PermissionResponseParams(
+            sessionId: sessionId,
+            requestId: requestId,
+            approved: approved
+        )
+        let response = try await sendRpc(method: "permission_response", params: params)
         if case .failure(let rpcError) = response.outcome {
             throw rpcError
         }
@@ -291,9 +309,11 @@ protocol ChatBridgeProtocol: AnyObject {
         systemPrompt: String?,
         permissionMode: PermissionMode,
         allowedTools: [String]?,
-        resumeSessionId: String?
+        resumeSessionId: String?,
+        additionalDirectories: [String]?
     ) -> AsyncThrowingStream<AgentEvent, Error>
     func sendMessage(_ message: String) async throws
+    func respondToPermission(requestId: String, approved: Bool) async throws
     func cancel() async
 }
 

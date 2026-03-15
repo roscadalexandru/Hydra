@@ -25,6 +25,7 @@ struct StartSessionParams: Codable {
     let permissionMode: PermissionMode
     let allowedTools: [String]?
     let resumeSessionId: String?
+    let additionalDirectories: [String]?
 }
 
 struct SendMessageParams: Codable {
@@ -34,6 +35,12 @@ struct SendMessageParams: Codable {
 
 struct CancelSessionParams: Codable {
     let sessionId: String
+}
+
+struct PermissionResponseParams: Codable {
+    let sessionId: String
+    let requestId: String
+    let approved: Bool
 }
 
 // MARK: - Incoming messages (Node → Swift)
@@ -114,6 +121,7 @@ enum AgentEvent: Decodable, Equatable {
     case textDelta(delta: String)
     case toolUse(toolName: String, toolId: String, input: AnyCodableValue)
     case toolResult(toolId: String, result: AnyCodableValue, isError: Bool)
+    case permissionRequest(requestId: String, toolName: String, description: String, affectedPaths: [String])
     case sessionStarted(sdkSessionId: String)
     case sessionComplete(durationMs: Int, costUsd: Double?)
     case sessionError(error: String)
@@ -128,6 +136,9 @@ enum AgentEvent: Decodable, Equatable {
         case input
         case result
         case isError
+        case requestId
+        case description
+        case affectedPaths
         case sdkSessionId
         case durationMs
         case costUsd
@@ -178,6 +189,12 @@ enum AgentEvent: Decodable, Equatable {
                 ?? container.decode(AnyCodableValue.self, forKey: .content))
             let isError = (try? container.decode(Bool.self, forKey: .isError)) ?? false
             self = .toolResult(toolId: toolId, result: result, isError: isError)
+        case "permission_request":
+            let requestId = try container.decode(String.self, forKey: .requestId)
+            let toolName = try container.decode(String.self, forKey: .toolName)
+            let description = try container.decode(String.self, forKey: .description)
+            let affectedPaths = try container.decode([String].self, forKey: .affectedPaths)
+            self = .permissionRequest(requestId: requestId, toolName: toolName, description: description, affectedPaths: affectedPaths)
         case "session_started":
             let sdkSessionId = try container.decode(String.self, forKey: .sdkSessionId)
             self = .sessionStarted(sdkSessionId: sdkSessionId)

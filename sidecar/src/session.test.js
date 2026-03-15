@@ -305,7 +305,7 @@ describe("Session", () => {
       assert.ok(errEvent, "should emit session_error");
       assert.equal(errEvent.durationMs, 500);
       assert.equal(errEvent.costUsd, 0.01);
-      assert.deepStrictEqual(errEvent.errors, ["Something went wrong"]);
+      assert.equal(errEvent.error, "Something went wrong");
     });
 
     it("emits session_error when SDK throws an exception", async () => {
@@ -333,7 +333,7 @@ describe("Session", () => {
 
       const errEvent = events.find((e) => e.type === "session_error");
       assert.ok(errEvent, "should emit session_error on exception");
-      assert.match(errEvent.errors[0], /SDK crashed/);
+      assert.match(errEvent.error, /SDK crashed/);
     });
   });
 
@@ -520,6 +520,100 @@ describe("Session", () => {
 
       // Should not throw — #query is cleared after run completes
       await session.cancel();
+    });
+  });
+
+  describe("additionalDirectories", () => {
+    it("passes additionalDirectories as addDirs to query options", async () => {
+      let capturedOpts = null;
+
+      const queryFn = (opts) => {
+        capturedOpts = opts;
+        const gen = (async function* () {
+          yield makeInitMsg();
+        })();
+        gen.interrupt = async () => {};
+        gen.close = () => {};
+        return gen;
+      };
+
+      const session = new Session(queryFn);
+      await session.start(
+        {
+          sessionId: "h-1",
+          prompt: "Hello",
+          workingDirectory: "/project-a",
+          permissionMode: "default",
+          additionalDirectories: ["/project-b", "/project-c"],
+        },
+        () => {},
+      );
+
+      assert.deepStrictEqual(capturedOpts.options.addDirs, ["/project-b", "/project-c"]);
+    });
+
+    it("does not set addDirs when additionalDirectories is not provided", async () => {
+      let capturedOpts = null;
+
+      const queryFn = (opts) => {
+        capturedOpts = opts;
+        const gen = (async function* () {
+          yield makeInitMsg();
+        })();
+        gen.interrupt = async () => {};
+        gen.close = () => {};
+        return gen;
+      };
+
+      const session = new Session(queryFn);
+      await session.start(
+        {
+          sessionId: "h-1",
+          prompt: "Hello",
+          workingDirectory: "/tmp",
+          permissionMode: "default",
+        },
+        () => {},
+      );
+
+      assert.equal(capturedOpts.options.addDirs, undefined);
+    });
+  });
+
+  describe("permission relay", () => {
+    it("emits permission_request for elicitation messages", async () => {
+      const messages = [
+        makeInitMsg(),
+        {
+          type: "system",
+          subtype: "permission_request",
+          requestId: "req-1",
+          toolName: "Write",
+          description: "Write to /tmp/foo.txt",
+          affectedPaths: ["/tmp/foo.txt"],
+        },
+      ];
+
+      const queryFn = fakeQuery(messages);
+      const session = new Session(queryFn);
+
+      const events = [];
+      await session.start(
+        {
+          sessionId: "h-1",
+          prompt: "Write a file",
+          workingDirectory: "/tmp",
+          permissionMode: "default",
+        },
+        (event) => events.push(event),
+      );
+
+      const permReq = events.find((e) => e.type === "permission_request");
+      assert.ok(permReq, "should emit permission_request");
+      assert.equal(permReq.requestId, "req-1");
+      assert.equal(permReq.toolName, "Write");
+      assert.equal(permReq.description, "Write to /tmp/foo.txt");
+      assert.deepStrictEqual(permReq.affectedPaths, ["/tmp/foo.txt"]);
     });
   });
 });

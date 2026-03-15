@@ -20,6 +20,15 @@ export class Session {
     await this.#run(message, this.#sdkSessionId, onEvent);
   }
 
+  async respondToPermission(requestId, approved) {
+    const q = this.#query;
+    if (!q || typeof q.respondToPermission !== "function") {
+      return false;
+    }
+    await q.respondToPermission(requestId, approved);
+    return true;
+  }
+
   async cancel() {
     const q = this.#query;
     this.#query = null;
@@ -40,6 +49,9 @@ export class Session {
         pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_PATH || undefined,
       },
     };
+    if (this.#config?.additionalDirectories?.length) {
+      opts.options.addDirs = this.#config.additionalDirectories;
+    }
     if (this.#config?.permissionMode === "bypassPermissions") {
       opts.options.allowDangerouslySkipPermissions = true;
     }
@@ -63,7 +75,7 @@ export class Session {
           type: "session_error",
           durationMs: 0,
           costUsd: 0,
-          errors: [err.message],
+          error: err.message,
         });
       }
     } finally {
@@ -77,6 +89,14 @@ export class Session {
         if (msg.subtype === "init") {
           this.#sdkSessionId = msg.session_id;
           onEvent({ type: "session_started", sdkSessionId: msg.session_id });
+        } else if (msg.subtype === "permission_request") {
+          onEvent({
+            type: "permission_request",
+            requestId: msg.requestId,
+            toolName: msg.toolName,
+            description: msg.description,
+            affectedPaths: msg.affectedPaths || [],
+          });
         }
         break;
 
@@ -120,7 +140,7 @@ export class Session {
             type: "session_error",
             durationMs: msg.duration_ms,
             costUsd: msg.total_cost_usd,
-            errors: msg.errors || [],
+            error: (msg.errors || []).join("; "),
           });
         } else {
           onEvent({

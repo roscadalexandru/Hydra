@@ -17,7 +17,8 @@ struct ChatView: View {
         database: AppDatabase = .shared,
         bridge: ChatBridgeProtocol,
         workspaceId: Int64,
-        workingDirectory: String
+        workingDirectory: String,
+        additionalDirectories: [String] = []
     ) {
         self.database = database
         self.bridge = bridge
@@ -28,7 +29,8 @@ struct ChatView: View {
             database: database,
             bridge: bridge,
             workspaceId: workspaceId,
-            workingDirectory: workingDirectory
+            workingDirectory: workingDirectory,
+            additionalDirectories: additionalDirectories
         ))
         _sessionListViewModel = State(initialValue: ChatSessionListViewModel(
             database: database,
@@ -128,6 +130,20 @@ struct ChatView: View {
             Task {
                 try? await sessionListViewModel.updateSessionProject(session, projectId: newProjectId)
             }
+        }
+        .sheet(item: Binding(
+            get: { viewModel.pendingPermissionRequest },
+            set: { newValue in
+                if newValue == nil {
+                    viewModel.respondToPermission(approved: false)
+                }
+            }
+        )) { request in
+            PermissionRequestView(
+                request: request,
+                onApprove: { viewModel.respondToPermission(approved: true) },
+                onDeny: { viewModel.respondToPermission(approved: false) }
+            )
         }
     }
 
