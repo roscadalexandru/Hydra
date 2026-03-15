@@ -143,6 +143,8 @@ final class ChatViewModel {
             persistMessage(role: .toolResult, content: resultJson, toolId: toolId, isError: isError)
 
         case .permissionRequest(let requestId, let toolName, let description, let affectedPaths):
+            // No queue needed: the Agent SDK blocks on each permission response
+            // before issuing the next request, so at most one is pending at a time.
             pendingPermissionRequest = PermissionRequestInfo(
                 requestId: requestId,
                 toolName: toolName,

@@ -305,7 +305,7 @@ describe("Session", () => {
       assert.ok(errEvent, "should emit session_error");
       assert.equal(errEvent.durationMs, 500);
       assert.equal(errEvent.costUsd, 0.01);
-      assert.deepStrictEqual(errEvent.errors, ["Something went wrong"]);
+      assert.equal(errEvent.error, "Something went wrong");
     });
 
     it("emits session_error when SDK throws an exception", async () => {
@@ -333,7 +333,7 @@ describe("Session", () => {
 
       const errEvent = events.find((e) => e.type === "session_error");
       assert.ok(errEvent, "should emit session_error on exception");
-      assert.match(errEvent.errors[0], /SDK crashed/);
+      assert.match(errEvent.error, /SDK crashed/);
     });
   });
 

@@ -74,7 +74,7 @@ export class Session {
           type: "session_error",
           durationMs: 0,
           costUsd: 0,
-          errors: [err.message],
+          error: err.message,
         });
       }
     } finally {
@@ -139,7 +139,7 @@ export class Session {
             type: "session_error",
             durationMs: msg.duration_ms,
             costUsd: msg.total_cost_usd,
-            errors: msg.errors || [],
+            error: (msg.errors || []).join("; "),
           });
         } else {
           onEvent({

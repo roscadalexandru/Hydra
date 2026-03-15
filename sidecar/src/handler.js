@@ -91,6 +91,7 @@ export function createHandler(queryFn, writeLine) {
       case "permission_response": {
         if (!requireParam(cmd, "sessionId")) return;
         if (!requireParam(cmd, "requestId")) return;
+        if (!requireParam(cmd, "approved")) return;
 
         const { sessionId, requestId, approved } = cmd.params;
 
