@@ -11,11 +11,22 @@ final class ChatViewModel {
     var inputText: String = ""
     var session: ChatSession?
     var errorMessage: String?
+    var pendingPermissionRequest: PermissionRequestInfo?
+
+    struct PermissionRequestInfo: Equatable, Identifiable {
+        let requestId: String
+        let toolName: String
+        let description: String
+        let affectedPaths: [String]
+
+        var id: String { requestId }
+    }
 
     private let database: AppDatabase
     private let bridge: ChatBridgeProtocol
     private let workspaceId: Int64
     private let workingDirectory: String
+    private let additionalDirectories: [String]
     private var cancellable: AnyCancellable?
     private var streamTask: Task<Void, Never>?
     private var nextOrderIndex: Int = 0
@@ -24,12 +35,14 @@ final class ChatViewModel {
         database: AppDatabase = .shared,
         bridge: ChatBridgeProtocol,
         workspaceId: Int64,
-        workingDirectory: String
+        workingDirectory: String,
+        additionalDirectories: [String] = []
     ) {
         self.database = database
         self.bridge = bridge
         self.workspaceId = workspaceId
         self.workingDirectory = workingDirectory
+        self.additionalDirectories = additionalDirectories
     }
 
     // MARK: - Public
@@ -65,9 +78,18 @@ final class ChatViewModel {
             systemPrompt: nil,
             permissionMode: .default,
             allowedTools: nil,
-            resumeSessionId: nil // MVP: each send() starts a fresh session
+            resumeSessionId: nil, // MVP: each send() starts a fresh session
+            additionalDirectories: additionalDirectories.isEmpty ? nil : additionalDirectories
         )
         consumeStream(stream)
+    }
+
+    func respondToPermission(approved: Bool) {
+        guard let request = pendingPermissionRequest else { return }
+        pendingPermissionRequest = nil
+        Task {
+            try? await bridge.respondToPermission(requestId: request.requestId, approved: approved)
+        }
     }
 
     func cancelSession() {
@@ -110,6 +132,14 @@ final class ChatViewModel {
         case .toolResult(let toolId, let result, let isError):
             let resultJson = serializeAnyCodableValue(result)
             persistMessage(role: .toolResult, content: resultJson, toolId: toolId, isError: isError)
+
+        case .permissionRequest(let requestId, let toolName, let description, let affectedPaths):
+            pendingPermissionRequest = PermissionRequestInfo(
+                requestId: requestId,
+                toolName: toolName,
+                description: description,
+                affectedPaths: affectedPaths
+            )
 
         case .sessionComplete(let durationMs, let costUsd):
             session?.status = .completed

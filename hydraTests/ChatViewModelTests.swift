@@ -186,6 +186,104 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertTrue(mock.cancelCalled)
     }
 
+    // MARK: - Permission Request
+
+    func testPermissionRequestSetsPending() async throws {
+        let (vm, mock, _) = try makeViewModel()
+        vm.inputText = "Write a file"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        mock.emit(.permissionRequest(
+            requestId: "req-1",
+            toolName: "Write",
+            description: "Write to /tmp/foo.txt",
+            affectedPaths: ["/tmp/foo.txt"]
+        ))
+
+        try await waitUntil { vm.pendingPermissionRequest != nil }
+
+        XCTAssertEqual(vm.pendingPermissionRequest?.requestId, "req-1")
+        XCTAssertEqual(vm.pendingPermissionRequest?.toolName, "Write")
+        XCTAssertEqual(vm.pendingPermissionRequest?.affectedPaths, ["/tmp/foo.txt"])
+    }
+
+    func testRespondToPermissionApproved() async throws {
+        let (vm, mock, _) = try makeViewModel()
+        vm.inputText = "Write a file"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        mock.emit(.permissionRequest(
+            requestId: "req-1",
+            toolName: "Write",
+            description: "Write to /tmp/foo.txt",
+            affectedPaths: ["/tmp/foo.txt"]
+        ))
+
+        try await waitUntil { vm.pendingPermissionRequest != nil }
+        vm.respondToPermission(approved: true)
+
+        XCTAssertNil(vm.pendingPermissionRequest)
+        try await waitUntil { mock.lastPermissionResponse != nil }
+        XCTAssertEqual(mock.lastPermissionResponse?.requestId, "req-1")
+        XCTAssertEqual(mock.lastPermissionResponse?.approved, true)
+    }
+
+    func testRespondToPermissionDenied() async throws {
+        let (vm, mock, _) = try makeViewModel()
+        vm.inputText = "Write a file"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        mock.emit(.permissionRequest(
+            requestId: "req-2",
+            toolName: "Bash",
+            description: "Run command",
+            affectedPaths: []
+        ))
+
+        try await waitUntil { vm.pendingPermissionRequest != nil }
+        vm.respondToPermission(approved: false)
+
+        XCTAssertNil(vm.pendingPermissionRequest)
+        try await waitUntil { mock.lastPermissionResponse != nil }
+        XCTAssertEqual(mock.lastPermissionResponse?.approved, false)
+    }
+
+    // MARK: - Additional Directories
+
+    func testSendPassesAdditionalDirectories() async throws {
+        let db = try TestDatabase.make()
+        var workspace = Workspace(name: "Test")
+        try await db.dbWriter.write { dbConn in
+            try workspace.insert(dbConn)
+        }
+        let mock = MockChatBridge()
+        let vm = ChatViewModel(
+            database: db,
+            bridge: mock,
+            workspaceId: workspace.id!,
+            workingDirectory: "/project-a",
+            additionalDirectories: ["/project-b", "/project-c"]
+        )
+
+        vm.inputText = "Hello"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        XCTAssertEqual(mock.lastAdditionalDirectories, ["/project-b", "/project-c"])
+    }
+
+    func testSendOmitsEmptyAdditionalDirectories() async throws {
+        let (vm, mock, _) = try makeViewModel()
+        vm.inputText = "Hello"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        XCTAssertNil(mock.lastAdditionalDirectories)
+    }
+
     // MARK: - Helpers
 
     private func makeViewModel() throws -> (ChatViewModel, MockChatBridge, AppDatabase) {
@@ -232,6 +330,8 @@ private final class MockChatBridge: ChatBridgeProtocol {
     private(set) var sendMessageCalled = false
     private(set) var cancelCalled = false
     private(set) var lastPrompt: String?
+    private(set) var lastAdditionalDirectories: [String]?
+    private(set) var lastPermissionResponse: (requestId: String, approved: Bool)?
 
     private var continuation: AsyncThrowingStream<AgentEvent, Error>.Continuation?
 
@@ -241,10 +341,12 @@ private final class MockChatBridge: ChatBridgeProtocol {
         systemPrompt: String?,
         permissionMode: PermissionMode,
         allowedTools: [String]?,
-        resumeSessionId: String?
+        resumeSessionId: String?,
+        additionalDirectories: [String]?
     ) -> AsyncThrowingStream<AgentEvent, Error> {
         startSessionCalled = true
         lastPrompt = prompt
+        lastAdditionalDirectories = additionalDirectories
         status = .running
 
         let (stream, cont) = AsyncThrowingStream<AgentEvent, Error>.makeStream()
@@ -254,6 +356,10 @@ private final class MockChatBridge: ChatBridgeProtocol {
 
     func sendMessage(_ message: String) async throws {
         sendMessageCalled = true
+    }
+
+    func respondToPermission(requestId: String, approved: Bool) async throws {
+        lastPermissionResponse = (requestId: requestId, approved: approved)
     }
 
     func cancel() async {

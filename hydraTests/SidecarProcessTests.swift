@@ -58,7 +58,8 @@ final class SidecarProcessTests: XCTestCase {
         let id1 = try sidecar.send(method: "start_session", params: StartSessionParams(
             sessionId: "s1", prompt: "hi", workingDirectory: "/tmp",
             systemPrompt: nil, permissionMode: .default,
-            allowedTools: nil, resumeSessionId: nil
+            allowedTools: nil, resumeSessionId: nil,
+            additionalDirectories: nil
         ))
         let id2 = try sidecar.send(method: "send_message", params: SendMessageParams(
             sessionId: "s1", message: "hello"
@@ -80,7 +81,8 @@ final class SidecarProcessTests: XCTestCase {
         let _ = try sidecar.send(method: "start_session", params: StartSessionParams(
             sessionId: "test-123", prompt: "hi", workingDirectory: "/tmp",
             systemPrompt: nil, permissionMode: .default,
-            allowedTools: nil, resumeSessionId: nil
+            allowedTools: nil, resumeSessionId: nil,
+            additionalDirectories: nil
         ))
 
         let received = try await collectEvents(from: sidecar, count: 1, timeout: 5)
@@ -103,7 +105,8 @@ final class SidecarProcessTests: XCTestCase {
         let _ = try sidecar.send(method: "start_session", params: StartSessionParams(
             sessionId: "s1", prompt: "hi", workingDirectory: "/tmp",
             systemPrompt: nil, permissionMode: .default,
-            allowedTools: nil, resumeSessionId: nil
+            allowedTools: nil, resumeSessionId: nil,
+            additionalDirectories: nil
         ))
         let _ = try sidecar.send(method: "send_message", params: SendMessageParams(
             sessionId: "s1", message: "hello"

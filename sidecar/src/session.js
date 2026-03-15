@@ -20,6 +20,15 @@ export class Session {
     await this.#run(message, this.#sdkSessionId, onEvent);
   }
 
+  async respondToPermission(requestId, approved) {
+    // Forward the permission decision back to the SDK query
+    // The SDK will handle resuming or cancelling the operation
+    const q = this.#query;
+    if (q && typeof q.respondToPermission === "function") {
+      await q.respondToPermission(requestId, approved);
+    }
+  }
+
   async cancel() {
     const q = this.#query;
     this.#query = null;
@@ -39,6 +48,9 @@ export class Session {
         allowedTools: this.#config?.allowedTools,
       },
     };
+    if (this.#config?.additionalDirectories?.length) {
+      opts.options.addDirs = this.#config.additionalDirectories;
+    }
     if (this.#config?.permissionMode === "bypassPermissions") {
       opts.options.allowDangerouslySkipPermissions = true;
     }
@@ -76,6 +88,14 @@ export class Session {
         if (msg.subtype === "init") {
           this.#sdkSessionId = msg.session_id;
           onEvent({ type: "session_started", sdkSessionId: msg.session_id });
+        } else if (msg.subtype === "permission_request") {
+          onEvent({
+            type: "permission_request",
+            requestId: msg.requestId,
+            toolName: msg.toolName,
+            description: msg.description,
+            affectedPaths: msg.affectedPaths || [],
+          });
         }
         break;
 

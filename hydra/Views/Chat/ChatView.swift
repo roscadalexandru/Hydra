@@ -27,5 +27,15 @@ struct ChatView: View {
                 onCancel: { viewModel.cancelSession() }
             )
         }
+        .sheet(item: Binding(
+            get: { viewModel.pendingPermissionRequest },
+            set: { _ in }
+        )) { request in
+            PermissionRequestView(
+                request: request,
+                onApprove: { viewModel.respondToPermission(approved: true) },
+                onDeny: { viewModel.respondToPermission(approved: false) }
+            )
+        }
     }
 }
