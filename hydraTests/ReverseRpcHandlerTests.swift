@@ -488,6 +488,153 @@ final class ReverseRpcHandlerTests: XCTestCase {
         }
     }
 
+    // MARK: - delete_epic
+
+    func testDeleteEpicRemovesFromDatabase() async throws {
+        var epic = Epic(workspaceId: workspaceId, title: "To delete")
+        try await database.dbWriter.write { db in try epic.insert(db) }
+
+        let params = AnyCodableValue.dictionary([
+            "id": .number(Double(epic.id!)),
+            "workspaceId": .number(Double(workspaceId)),
+        ])
+
+        let result = try await handler.handle(method: "db.delete_epic", params: params)
+
+        if case .dictionary(let dict) = result {
+            XCTAssertEqual(dict["deleted"], .bool(true))
+        } else {
+            XCTFail("Expected dictionary result")
+        }
+
+        let deleted = try await database.dbWriter.read { db in
+            try Epic.fetchOne(db, id: epic.id!)
+        }
+        XCTAssertNil(deleted)
+    }
+
+    func testDeleteEpicReturnsErrorForInvalidId() async throws {
+        let params = AnyCodableValue.dictionary([
+            "id": .number(999),
+            "workspaceId": .number(Double(workspaceId)),
+        ])
+
+        do {
+            _ = try await handler.handle(method: "db.delete_epic", params: params)
+            XCTFail("Expected error")
+        } catch let error as ReverseRpcHandlerError {
+            XCTAssertEqual(error, .notFound("Epic", 999))
+        }
+    }
+
+    func testDeleteEpicRejectsEpicFromOtherWorkspace() async throws {
+        var otherWs = Workspace(name: "Other WS")
+        try await database.dbWriter.write { db in try otherWs.insert(db) }
+        var epic = Epic(workspaceId: otherWs.id!, title: "Other WS epic")
+        try await database.dbWriter.write { db in try epic.insert(db) }
+
+        let params = AnyCodableValue.dictionary([
+            "id": .number(Double(epic.id!)),
+            "workspaceId": .number(Double(workspaceId)),
+        ])
+
+        do {
+            _ = try await handler.handle(method: "db.delete_epic", params: params)
+            XCTFail("Expected error — should not delete other workspace's epic")
+        } catch let error as ReverseRpcHandlerError {
+            XCTAssertEqual(error, .notFound("Epic", epic.id!))
+        }
+    }
+
+    // MARK: - Deterministic ordering
+
+    func testListIssuesReturnsDeterministicOrder() async throws {
+        try await database.dbWriter.write { db in
+            var i1 = hydra.Issue(workspaceId: workspaceId, title: "First")
+            var i2 = hydra.Issue(workspaceId: workspaceId, title: "Second")
+            var i3 = hydra.Issue(workspaceId: workspaceId, title: "Third")
+            try i1.insert(db)
+            try i2.insert(db)
+            try i3.insert(db)
+        }
+
+        let params = AnyCodableValue.dictionary([
+            "workspaceId": .number(Double(workspaceId)),
+        ])
+
+        let result = try await handler.handle(method: "db.list_issues", params: params)
+
+        if case .array(let issues) = result {
+            XCTAssertEqual(issues.count, 3)
+            // Should be ordered by ID (insertion order)
+            if case .dictionary(let first) = issues[0],
+               case .dictionary(let last) = issues[2] {
+                XCTAssertEqual(first["title"], .string("First"))
+                XCTAssertEqual(last["title"], .string("Third"))
+            }
+        } else {
+            XCTFail("Expected array result")
+        }
+    }
+
+    func testListEpicsReturnsDeterministicOrder() async throws {
+        try await database.dbWriter.write { db in
+            var e1 = Epic(workspaceId: workspaceId, title: "Alpha")
+            var e2 = Epic(workspaceId: workspaceId, title: "Beta")
+            try e1.insert(db)
+            try e2.insert(db)
+        }
+
+        let params = AnyCodableValue.dictionary([
+            "workspaceId": .number(Double(workspaceId)),
+        ])
+
+        let result = try await handler.handle(method: "db.list_epics", params: params)
+
+        if case .array(let epics) = result {
+            XCTAssertEqual(epics.count, 2)
+            if case .dictionary(let first) = epics[0] {
+                XCTAssertEqual(first["title"], .string("Alpha"))
+            }
+        } else {
+            XCTFail("Expected array result")
+        }
+    }
+
+    // MARK: - Timestamps in serialized records
+
+    func testCreateIssueIncludesTimestamps() async throws {
+        let params = AnyCodableValue.dictionary([
+            "workspaceId": .number(Double(workspaceId)),
+            "title": .string("Timestamped"),
+        ])
+
+        let result = try await handler.handle(method: "db.create_issue", params: params)
+
+        if case .dictionary(let dict) = result {
+            XCTAssertNotNil(dict["createdAt"])
+            XCTAssertNotNil(dict["updatedAt"])
+        } else {
+            XCTFail("Expected dictionary result")
+        }
+    }
+
+    func testCreateEpicIncludesTimestamps() async throws {
+        let params = AnyCodableValue.dictionary([
+            "workspaceId": .number(Double(workspaceId)),
+            "title": .string("Timestamped Epic"),
+        ])
+
+        let result = try await handler.handle(method: "db.create_epic", params: params)
+
+        if case .dictionary(let dict) = result {
+            XCTAssertNotNil(dict["createdAt"])
+            XCTAssertNotNil(dict["updatedAt"])
+        } else {
+            XCTFail("Expected dictionary result")
+        }
+    }
+
     // MARK: - Unknown method
 
     func testUnknownMethodReturnsError() async throws {

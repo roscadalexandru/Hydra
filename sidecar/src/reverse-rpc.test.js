@@ -3,17 +3,21 @@ import assert from "node:assert/strict";
 import { ReverseRpc } from "./reverse-rpc.js";
 
 describe("ReverseRpc", () => {
-  it("sends a JSON-RPC request via writeLine", () => {
+  it("sends a JSON-RPC request via writeLine", async () => {
     const lines = [];
-    const rpc = new ReverseRpc((obj) => lines.push(obj));
+    const rpc = new ReverseRpc((obj) => lines.push(obj), { timeoutMs: 100 });
 
-    rpc.call("db.create_issue", { title: "Bug" });
+    const promise = rpc.call("db.create_issue", { title: "Bug" });
 
     assert.equal(lines.length, 1);
     assert.equal(lines[0].jsonrpc, "2.0");
     assert.equal(lines[0].method, "db.create_issue");
     assert.deepEqual(lines[0].params, { title: "Bug" });
     assert.equal(typeof lines[0].id, "number");
+
+    // Resolve to avoid unhandled rejection from timeout
+    rpc.handleResponse({ id: lines[0].id, result: {} });
+    await promise;
   });
 
   it("resolves when a matching success response arrives", async () => {
@@ -55,16 +59,31 @@ describe("ReverseRpc", () => {
     assert.equal(rpc.handleResponse({ id: 999, result: {} }), false);
   });
 
-  it("uses incrementing IDs", () => {
-    const lines = [];
-    const rpc = new ReverseRpc((obj) => lines.push(obj));
+  it("rejects with timeout when no response arrives", async () => {
+    const rpc = new ReverseRpc(() => {}, { timeoutMs: 50 });
 
-    rpc.call("db.a", {});
-    rpc.call("db.b", {});
-    rpc.call("db.c", {});
+    const promise = rpc.call("db.slow_method", {});
+    await assert.rejects(promise, { message: /timeout/i });
+  });
+
+  it("uses incrementing IDs", async () => {
+    const lines = [];
+    const rpc = new ReverseRpc((obj) => lines.push(obj), { timeoutMs: 100 });
+
+    const promises = [
+      rpc.call("db.a", {}),
+      rpc.call("db.b", {}),
+      rpc.call("db.c", {}),
+    ];
 
     assert.equal(lines[0].id, 1);
     assert.equal(lines[1].id, 2);
     assert.equal(lines[2].id, 3);
+
+    // Resolve all to avoid unhandled rejections
+    for (const line of lines) {
+      rpc.handleResponse({ id: line.id, result: {} });
+    }
+    await Promise.all(promises);
   });
 });

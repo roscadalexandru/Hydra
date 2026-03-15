@@ -144,10 +144,22 @@ export function createPmServer(reverseRpc, workspaceId) {
     },
   );
 
+  const deleteEpic = tool(
+    "delete_epic",
+    "Delete an epic from the workspace.",
+    {
+      id: z.number().describe("Epic ID to delete"),
+    },
+    async (args) => {
+      const result = await reverseRpc.call("db.delete_epic", { workspaceId, ...args });
+      return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+    },
+  );
+
   return createSdkMcpServer("hydra-pm", {
     tools: [
       listIssues, getIssue, createIssue, updateIssue, deleteIssue,
-      listEpics, createEpic, updateEpic,
+      listEpics, createEpic, updateEpic, deleteEpic,
     ],
   });
 }

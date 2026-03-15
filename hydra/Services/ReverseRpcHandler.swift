@@ -29,6 +29,8 @@ struct ReverseRpcHandler {
             return try await createEpic(params: params)
         case "db.update_epic":
             return try await updateEpic(params: params)
+        case "db.delete_epic":
+            return try await deleteEpic(params: params)
         default:
             throw ReverseRpcHandlerError.unknownMethod(method)
         }
@@ -102,7 +104,7 @@ struct ReverseRpcHandler {
                 request = request.filter(Issue.Columns.assigneeType == assigneeType)
             }
 
-            return try request.fetchAll(db)
+            return try request.order(Issue.Columns.id).fetchAll(db)
         }
 
         return .array(issues.map { issueToValue($0) })
@@ -169,7 +171,7 @@ struct ReverseRpcHandler {
         let workspaceId = try requireInt64(dict, "workspaceId")
 
         let epics = try await database.dbWriter.read { db in
-            try Epic.filter(Epic.Columns.workspaceId == workspaceId).fetchAll(db)
+            try Epic.filter(Epic.Columns.workspaceId == workspaceId).order(Epic.Columns.id).fetchAll(db)
         }
 
         return .array(epics.map { epicToValue($0) })
@@ -220,7 +222,35 @@ struct ReverseRpcHandler {
         return epicToValue(updated)
     }
 
+    private func deleteEpic(params: AnyCodableValue?) async throws -> AnyCodableValue {
+        let dict = try requireDict(params)
+        let id = try requireInt64(dict, "id")
+        let workspaceId = try requireInt64(dict, "workspaceId")
+
+        let deleted = try await database.dbWriter.write { db -> Bool in
+            guard let epic = try Epic
+                .filter(Epic.Columns.id == id && Epic.Columns.workspaceId == workspaceId)
+                .fetchOne(db) else {
+                return false
+            }
+            try epic.delete(db)
+            return true
+        }
+
+        guard deleted else {
+            throw ReverseRpcHandlerError.notFound("Epic", id)
+        }
+
+        return .dictionary(["deleted": .bool(true), "id": .number(Double(id))])
+    }
+
     // MARK: - Serialization helpers
+
+    private static let isoFormatter: ISO8601DateFormatter = {
+        let f = ISO8601DateFormatter()
+        f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return f
+    }()
 
     private func issueToValue(_ issue: Issue) -> AnyCodableValue {
         var dict: [String: AnyCodableValue] = [
@@ -232,6 +262,8 @@ struct ReverseRpcHandler {
             "priority": .string(issue.priority.rawValue),
             "assigneeType": .string(issue.assigneeType),
             "assigneeName": .string(issue.assigneeName),
+            "createdAt": .string(Self.isoFormatter.string(from: issue.createdAt)),
+            "updatedAt": .string(Self.isoFormatter.string(from: issue.updatedAt)),
         ]
         if let epicId = issue.epicId {
             dict["epicId"] = .number(Double(epicId))
@@ -245,6 +277,8 @@ struct ReverseRpcHandler {
             "workspaceId": .number(Double(epic.workspaceId)),
             "title": .string(epic.title),
             "description": .string(epic.description),
+            "createdAt": .string(Self.isoFormatter.string(from: epic.createdAt)),
+            "updatedAt": .string(Self.isoFormatter.string(from: epic.updatedAt)),
         ])
     }
 

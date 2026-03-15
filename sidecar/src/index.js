@@ -13,6 +13,9 @@ const reverseRpc = new ReverseRpc(writeLine);
 
 // workspaceId is passed via HYDRA_WORKSPACE_ID env var, set by Swift before spawning
 const workspaceId = Number(process.env.HYDRA_WORKSPACE_ID) || 0;
+if (workspaceId === 0) {
+  process.stderr.write("[hydra-sidecar] HYDRA_WORKSPACE_ID not set — PM tools will be unavailable\n");
+}
 const pmServer = workspaceId > 0 ? createPmServer(reverseRpc, workspaceId) : null;
 
 const handleCommand = createHandler(createQueryFn(), writeLine, pmServer);

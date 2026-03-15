@@ -8,12 +8,16 @@ export class ReverseRpc {
   #nextId = 1;
   #pending = new Map();
   #writeLine;
+  #timeoutMs;
 
   /**
    * @param {Function} writeLine - writes NDJSON to stdout (same as command responses)
+   * @param {object} [options]
+   * @param {number} [options.timeoutMs=10000] - timeout for each call in milliseconds
    */
-  constructor(writeLine) {
+  constructor(writeLine, { timeoutMs = 10000 } = {}) {
     this.#writeLine = writeLine;
+    this.#timeoutMs = timeoutMs;
   }
 
   /**
@@ -24,10 +28,21 @@ export class ReverseRpc {
    */
   call(method, params) {
     const id = this.#nextId++;
-    return new Promise((resolve, reject) => {
+    const rpcPromise = new Promise((resolve, reject) => {
       this.#pending.set(id, { resolve, reject });
       this.#writeLine({ jsonrpc: "2.0", id, method, params });
     });
+
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        if (this.#pending.has(id)) {
+          this.#pending.delete(id);
+          reject(new Error(`Reverse RPC timeout after ${this.#timeoutMs}ms: ${method}`));
+        }
+      }, this.#timeoutMs);
+    });
+
+    return Promise.race([rpcPromise, timeoutPromise]);
   }
 
   /**
