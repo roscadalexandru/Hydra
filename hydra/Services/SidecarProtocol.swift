@@ -85,7 +85,7 @@ enum SidecarMessage: Decodable, Equatable {
             self = .response(response)
         } else if container.contains(.method) {
             let method = try container.decode(String.self, forKey: .method)
-            guard method == "event" else {
+            guard method == "stream_event" else {
                 throw DecodingError.dataCorrupted(
                     DecodingError.Context(
                         codingPath: decoder.codingPath,
@@ -132,6 +132,7 @@ enum AgentEvent: Decodable, Equatable {
         case delta
         case toolName
         case toolId
+        case toolUseId
         case input
         case result
         case isError
@@ -142,6 +143,21 @@ enum AgentEvent: Decodable, Equatable {
         case durationMs
         case costUsd
         case error
+        case errors
+        case message
+        case name
+    }
+
+    private struct SdkMessage: Decodable {
+        let content: [SdkContentBlock]
+    }
+
+    private struct SdkContentBlock: Decodable {
+        let type: String
+        let text: String?
+        let id: String?
+        let name: String?
+        let input: AnyCodableValue?
     }
 
     init(from decoder: Decoder) throws {
@@ -150,20 +166,28 @@ enum AgentEvent: Decodable, Equatable {
 
         switch type {
         case "assistant_message":
-            let content = try container.decode(String.self, forKey: .content)
-            self = .assistantMessage(content: content)
+            let message = try container.decode(SdkMessage.self, forKey: .message)
+            let text = message.content
+                .filter { $0.type == "text" }
+                .compactMap { $0.text }
+                .joined()
+            self = .assistantMessage(content: text)
         case "text_delta":
             let delta = try container.decode(String.self, forKey: .delta)
             self = .textDelta(delta: delta)
         case "tool_use":
-            let toolName = try container.decode(String.self, forKey: .toolName)
-            let toolId = try container.decode(String.self, forKey: .toolId)
+            let toolName = try (container.decodeIfPresent(String.self, forKey: .toolName)
+                ?? container.decode(String.self, forKey: .name))
+            let toolId = try (container.decodeIfPresent(String.self, forKey: .toolId)
+                ?? container.decode(String.self, forKey: .toolUseId))
             let input = try container.decode(AnyCodableValue.self, forKey: .input)
             self = .toolUse(toolName: toolName, toolId: toolId, input: input)
         case "tool_result":
-            let toolId = try container.decode(String.self, forKey: .toolId)
-            let result = try container.decode(AnyCodableValue.self, forKey: .result)
-            let isError = try container.decode(Bool.self, forKey: .isError)
+            let toolId = try (container.decodeIfPresent(String.self, forKey: .toolId)
+                ?? container.decode(String.self, forKey: .toolUseId))
+            let result = try (container.decodeIfPresent(AnyCodableValue.self, forKey: .result)
+                ?? container.decode(AnyCodableValue.self, forKey: .content))
+            let isError = (try? container.decode(Bool.self, forKey: .isError)) ?? false
             self = .toolResult(toolId: toolId, result: result, isError: isError)
         case "permission_request":
             let requestId = try container.decode(String.self, forKey: .requestId)
@@ -179,8 +203,13 @@ enum AgentEvent: Decodable, Equatable {
             let costUsd = try container.decodeIfPresent(Double.self, forKey: .costUsd)
             self = .sessionComplete(durationMs: durationMs, costUsd: costUsd)
         case "session_error":
-            let error = try container.decode(String.self, forKey: .error)
-            self = .sessionError(error: error)
+            if let error = try? container.decode(String.self, forKey: .error) {
+                self = .sessionError(error: error)
+            } else if let errors = try? container.decode([String].self, forKey: .errors) {
+                self = .sessionError(error: errors.joined(separator: "; "))
+            } else {
+                self = .sessionError(error: "Unknown error")
+            }
         default:
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(

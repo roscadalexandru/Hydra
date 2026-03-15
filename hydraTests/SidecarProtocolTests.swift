@@ -167,7 +167,7 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testSidecarMessageDecodesEvent() throws {
         let json = """
-        {"jsonrpc":"2.0","method":"event","params":{"session_id":"s1","event":{"type":"session_started","sdk_session_id":"sdk-42"}}}
+        {"jsonrpc":"2.0","method":"stream_event","params":{"session_id":"s1","event":{"type":"session_started","sdk_session_id":"sdk-42"}}}
         """.data(using: .utf8)!
 
         let message = try decoder.decode(SidecarMessage.self, from: json)
@@ -188,7 +188,7 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testAgentEventDecodesAssistantMessage() throws {
         let json = """
-        {"type":"assistant_message","content":"Hello world"}
+        {"type":"assistant_message","message":{"content":[{"type":"text","text":"Hello world"}]}}
         """.data(using: .utf8)!
 
         let event = try decoder.decode(AgentEvent.self, from: json)
@@ -396,7 +396,7 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testSidecarMessageEventWithoutParamsThrowsDescriptiveError() {
         let json = """
-        {"jsonrpc":"2.0","method":"event"}
+        {"jsonrpc":"2.0","method":"stream_event"}
         """.data(using: .utf8)!
 
         XCTAssertThrowsError(try decoder.decode(SidecarMessage.self, from: json)) { error in
@@ -552,7 +552,7 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testSidecarMessageWithBothIdAndMethodDecodesAsResponse() throws {
         let json = """
-        {"jsonrpc":"2.0","id":1,"method":"event","result":{"ok":true}}
+        {"jsonrpc":"2.0","id":1,"method":"stream_event","result":{"ok":true}}
         """.data(using: .utf8)!
 
         let message = try decoder.decode(SidecarMessage.self, from: json)
