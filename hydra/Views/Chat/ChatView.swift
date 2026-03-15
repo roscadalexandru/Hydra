@@ -3,11 +3,17 @@ import SwiftUI
 struct ChatView: View {
     @State private var viewModel: ChatViewModel
 
-    init(bridge: ChatBridgeProtocol, workspaceId: Int64, workingDirectory: String) {
+    init(
+        bridge: ChatBridgeProtocol,
+        workspaceId: Int64,
+        workingDirectory: String,
+        additionalDirectories: [String] = []
+    ) {
         _viewModel = State(initialValue: ChatViewModel(
             bridge: bridge,
             workspaceId: workspaceId,
-            workingDirectory: workingDirectory
+            workingDirectory: workingDirectory,
+            additionalDirectories: additionalDirectories
         ))
     }
 

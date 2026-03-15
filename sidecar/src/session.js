@@ -21,12 +21,12 @@ export class Session {
   }
 
   async respondToPermission(requestId, approved) {
-    // Forward the permission decision back to the SDK query
-    // The SDK will handle resuming or cancelling the operation
     const q = this.#query;
-    if (q && typeof q.respondToPermission === "function") {
-      await q.respondToPermission(requestId, approved);
+    if (!q || typeof q.respondToPermission !== "function") {
+      return false;
     }
+    await q.respondToPermission(requestId, approved);
+    return true;
   }
 
   async cancel() {

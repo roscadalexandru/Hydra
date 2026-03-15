@@ -108,7 +108,14 @@ export function createHandler(queryFn, writeLine) {
           return;
         }
 
-        await activeSession.respondToPermission(requestId, approved);
+        const delivered = await activeSession.respondToPermission(requestId, approved);
+
+        if (!delivered) {
+          writeLine(
+            formatError(cmd.id, -32602, "Session query is no longer active"),
+          );
+          return;
+        }
 
         writeLine(
           formatResponse(cmd.id, { sessionId, status: "accepted" }),

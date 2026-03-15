@@ -50,5 +50,6 @@ struct PermissionRequestView: View {
         }
         .padding(20)
         .frame(width: 400)
+        .frame(minHeight: 200)
     }
 }

@@ -85,6 +85,9 @@ final class ChatViewModel {
     }
 
     func respondToPermission(approved: Bool) {
+        // Guard prevents double-send: when the user taps Approve/Deny, we nil
+        // pendingPermissionRequest before SwiftUI's sheet binding setter fires.
+        // The setter also calls this method, but the guard returns early.
         guard let request = pendingPermissionRequest else { return }
         pendingPermissionRequest = nil
         Task { [weak self] in
