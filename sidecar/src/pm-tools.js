@@ -56,6 +56,8 @@ export function createPmServer(reverseRpc, workspaceId) {
         .describe("Epic ID to associate the issue with"),
       assigneeType: z.enum(["human", "agent"]).optional()
         .describe("Assignee type (default: human)"),
+      assigneeName: z.string().optional()
+        .describe("Name of the assignee"),
     },
     async (args) => {
       const result = await reverseRpc.call("db.create_issue", {
@@ -81,6 +83,8 @@ export function createPmServer(reverseRpc, workspaceId) {
         .describe("New epic ID"),
       assigneeType: z.enum(["human", "agent"]).optional()
         .describe("New assignee type"),
+      assigneeName: z.string().optional()
+        .describe("New assignee name"),
     },
     async (args) => {
       const result = await reverseRpc.call("db.update_issue", { workspaceId, ...args });

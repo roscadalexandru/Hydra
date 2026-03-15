@@ -25,7 +25,8 @@ const rl = createInterface({ input: process.stdin });
 // routes these responses to reverseRpc before dispatching new commands.
 rl.on("line", async (line) => {
   try {
-    // Check if this is a reverse RPC response (has id but no method)
+    // Reverse RPC responses have id + result/error but no method field;
+    // commands always have a method field per JSON-RPC 2.0.
     const parsed = JSON.parse(line);
     if (parsed.id != null && !parsed.method) {
       reverseRpc.handleResponse(parsed);
