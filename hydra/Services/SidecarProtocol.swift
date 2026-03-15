@@ -61,9 +61,23 @@ struct StreamNotification: Decodable, Equatable {
     let event: AgentEvent
 }
 
+struct ReverseRpcRequest: Decodable, Equatable {
+    let id: Int
+    let method: String
+    let params: AnyCodableValue?
+}
+
+struct ReverseRpcResponse: Encodable {
+    let jsonrpc: String = "2.0"
+    let id: Int
+    var result: AnyCodableValue?
+    var error: RpcError?
+}
+
 enum SidecarMessage: Decodable, Equatable {
     case response(RpcResponse)
     case event(StreamNotification)
+    case toolRequest(ReverseRpcRequest)
 
     private enum CodingKeys: String, CodingKey {
         case id
@@ -73,29 +87,39 @@ enum SidecarMessage: Decodable, Equatable {
 
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
-        if container.contains(.id) {
+
+        if container.contains(.method) {
+            let method = try container.decode(String.self, forKey: .method)
+
+            if container.contains(.id) {
+                // Reverse RPC request from sidecar (has both id and method)
+                let request = try ReverseRpcRequest(from: decoder)
+                self = .toolRequest(request)
+            } else {
+                // Event notification (has method but no id)
+                guard method == "event" || method == "stream_event" else {
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(
+                            codingPath: decoder.codingPath,
+                            debugDescription: "Unknown notification method: '\(method)'"
+                        )
+                    )
+                }
+                guard container.contains(.params) else {
+                    throw DecodingError.dataCorrupted(
+                        DecodingError.Context(
+                            codingPath: decoder.codingPath,
+                            debugDescription: "Event notification is missing required 'params' field"
+                        )
+                    )
+                }
+                let params = try container.decode(StreamNotification.self, forKey: .params)
+                self = .event(params)
+            }
+        } else if container.contains(.id) {
+            // RPC response (has id but no method)
             let response = try RpcResponse(from: decoder)
             self = .response(response)
-        } else if container.contains(.method) {
-            let method = try container.decode(String.self, forKey: .method)
-            guard method == "event" else {
-                throw DecodingError.dataCorrupted(
-                    DecodingError.Context(
-                        codingPath: decoder.codingPath,
-                        debugDescription: "Unknown notification method: '\(method)'"
-                    )
-                )
-            }
-            guard container.contains(.params) else {
-                throw DecodingError.dataCorrupted(
-                    DecodingError.Context(
-                        codingPath: decoder.codingPath,
-                        debugDescription: "Event notification is missing required 'params' field"
-                    )
-                )
-            }
-            let params = try container.decode(StreamNotification.self, forKey: .params)
-            self = .event(params)
         } else {
             throw DecodingError.dataCorrupted(
                 DecodingError.Context(

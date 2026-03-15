@@ -5,9 +5,10 @@ import { Session } from "./session.js";
  * Creates a command handler with injected dependencies.
  * @param {Function} queryFn - The SDK query function (or fake for testing)
  * @param {Function} writeLine - Function to write NDJSON output
+ * @param {object} [pmServer] - MCP server for project management tools
  * @returns {Function} Async command handler
  */
-export function createHandler(queryFn, writeLine) {
+export function createHandler(queryFn, writeLine, pmServer) {
   let activeSession = null;
   let activeSessionId = null;
 
@@ -36,7 +37,7 @@ export function createHandler(queryFn, writeLine) {
           activeSessionId = null;
         }
 
-        activeSession = new Session(queryFn);
+        activeSession = new Session(queryFn, pmServer);
         activeSessionId = sessionId;
 
         writeLine(

@@ -9,6 +9,8 @@ final class SidecarBridge {
     private(set) var sdkSessionId: String?
     private(set) var status: SessionStatus = .idle
 
+    var toolRequestHandler: (@Sendable (String, AnyCodableValue?) async throws -> AnyCodableValue)?
+
     enum SessionStatus: Equatable {
         case idle
         case starting
@@ -37,8 +39,16 @@ final class SidecarBridge {
         observeAppTermination()
     }
 
-    convenience init(sidecarScript: String) {
-        self.init(processFactory: { SidecarProcess(sidecarScript: sidecarScript) })
+    convenience init(sidecarScript: String, database: AppDatabase? = nil, workspaceId: Int64? = nil) {
+        let env: [String: String] = workspaceId.map { ["HYDRA_WORKSPACE_ID": String($0)] } ?? [:]
+        self.init(processFactory: { SidecarProcess(sidecarScript: sidecarScript, environment: env) })
+        if let database, let workspaceId {
+            let handler = ReverseRpcHandler(database: database)
+            self.toolRequestHandler = { method, params in
+                // Inject workspaceId into params for operations that need it
+                try await handler.handle(method: method, params: params)
+            }
+        }
     }
 
     deinit {
@@ -178,6 +188,24 @@ final class SidecarBridge {
             let continuation = pendingResponses.removeValue(forKey: response.id)
             lock.unlock()
             continuation?.resume(returning: response)
+
+        case .toolRequest(let request):
+            Task { [weak self] in
+                guard let self else { return }
+                var response = ReverseRpcResponse(id: request.id)
+                do {
+                    guard let handler = self.toolRequestHandler else {
+                        response.error = RpcError(code: -32601, message: "No tool request handler registered")
+                        try? self.process?.sendResponse(response)
+                        return
+                    }
+                    let result = try await handler(request.method, request.params)
+                    response.result = result
+                } catch {
+                    response.error = RpcError(code: -1, message: error.localizedDescription)
+                }
+                try? self.process?.sendResponse(response)
+            }
 
         case .event(let notification):
             guard notification.sessionId == sessionId else { return }

@@ -243,6 +243,56 @@ final class SidecarBridgeTests: XCTestCase {
         XCTAssertEqual(events[4], .sessionComplete(durationMs: 500, costUsd: 0.05))
     }
 
+    // MARK: - Tool Request Handling (Reverse RPC)
+
+    func testToolRequestCallsHandlerAndSendsResponse() async throws {
+        let (bridge, mock) = makeBridgeAndMock()
+        let _ = bridge.startSession(prompt: "hi", workingDirectory: "/tmp")
+        try await emitSuccessfulStart(bridge: bridge, mock: mock)
+
+        // Set up a tool request handler
+        bridge.toolRequestHandler = { method, params in
+            XCTAssertEqual(method, "db.list_issues")
+            return .array([.dictionary(["id": .number(1), "title": .string("Test")])])
+        }
+
+        // Emit a tool request from the sidecar
+        mock.emit(.toolRequest(ReverseRpcRequest(
+            id: 10,
+            method: "db.list_issues",
+            params: .dictionary(["workspaceId": .number(1)])
+        )))
+
+        // Wait for the response to be sent back
+        try await waitUntil { mock.sentResponses.contains { $0.id == 10 } }
+
+        let response = mock.sentResponses.first { $0.id == 10 }!
+        XCTAssertNotNil(response.result)
+        XCTAssertNil(response.error)
+    }
+
+    func testToolRequestHandlerErrorSendsErrorResponse() async throws {
+        let (bridge, mock) = makeBridgeAndMock()
+        let _ = bridge.startSession(prompt: "hi", workingDirectory: "/tmp")
+        try await emitSuccessfulStart(bridge: bridge, mock: mock)
+
+        bridge.toolRequestHandler = { _, _ in
+            throw ReverseRpcHandlerError.notFound("Issue", 999)
+        }
+
+        mock.emit(.toolRequest(ReverseRpcRequest(
+            id: 11,
+            method: "db.get_issue",
+            params: .dictionary(["id": .number(999)])
+        )))
+
+        try await waitUntil { mock.sentResponses.contains { $0.id == 11 } }
+
+        let response = mock.sentResponses.first { $0.id == 11 }!
+        XCTAssertNil(response.result)
+        XCTAssertNotNil(response.error)
+    }
+
     // MARK: - Helpers
 
     private func makeBridge() -> SidecarBridge {
@@ -311,6 +361,7 @@ private final class MockSidecarProcess: SidecarProcessProtocol, @unchecked Senda
     private var _startCallCount = 0
     private var _terminateCallCount = 0
     private var _sentMessages: [(method: String, id: Int)] = []
+    private var _sentResponses: [(id: Int, result: AnyCodableValue?, error: RpcError?)] = []
     private var nextId = 1
 
     var isRunning: Bool {
@@ -337,6 +388,12 @@ private final class MockSidecarProcess: SidecarProcessProtocol, @unchecked Senda
         return _sentMessages
     }
 
+    var sentResponses: [(id: Int, result: AnyCodableValue?, error: RpcError?)] {
+        lock.lock()
+        defer { lock.unlock() }
+        return _sentResponses
+    }
+
     init() {
         let (stream, cont) = AsyncStream<SidecarMessage>.makeStream()
         self.events = stream
@@ -359,6 +416,13 @@ private final class MockSidecarProcess: SidecarProcessProtocol, @unchecked Senda
         nextId += 1
         _sentMessages.append((method: method, id: id))
         return id
+    }
+
+    func sendResponse(_ response: ReverseRpcResponse) throws {
+        lock.lock()
+        defer { lock.unlock() }
+        guard _isRunning else { throw SidecarProcessError.notRunning }
+        _sentResponses.append((id: response.id, result: response.result, error: response.error))
     }
 
     func terminate() {

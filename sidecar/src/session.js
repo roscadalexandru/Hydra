@@ -3,12 +3,18 @@ export class Session {
   #sdkSessionId;
   #query;
   #config;
+  #pmServer;
 
-  constructor(queryFn) {
+  /**
+   * @param {Function} queryFn
+   * @param {object} [pmServer] - MCP server for project management tools
+   */
+  constructor(queryFn, pmServer) {
     this.#queryFn = queryFn;
     this.#sdkSessionId = null;
     this.#query = null;
     this.#config = null;
+    this.#pmServer = pmServer || null;
   }
 
   async start(config, onEvent) {
@@ -30,6 +36,11 @@ export class Session {
   }
 
   async #run(prompt, resumeSessionId, onEvent) {
+    const mcpServers = {};
+    if (this.#pmServer) {
+      mcpServers["hydra-pm"] = this.#pmServer;
+    }
+
     const opts = {
       prompt,
       options: {
@@ -37,6 +48,7 @@ export class Session {
         systemPrompt: this.#config?.systemPrompt,
         permissionMode: this.#config?.permissionMode,
         allowedTools: this.#config?.allowedTools,
+        ...(Object.keys(mcpServers).length > 0 ? { mcpServers } : {}),
       },
     };
     if (this.#config?.permissionMode === "bypassPermissions") {

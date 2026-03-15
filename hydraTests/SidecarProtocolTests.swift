@@ -545,11 +545,97 @@ final class SidecarProtocolTests: XCTestCase {
         XCTAssertEqual(p["session_id"] as? String, "s2")
     }
 
-    // MARK: - SidecarMessage with both id and method
+    // MARK: - SidecarMessage with both id and method (reverse RPC)
 
-    func testSidecarMessageWithBothIdAndMethodDecodesAsResponse() throws {
+    func testSidecarMessageWithBothIdAndMethodDecodesAsToolRequest() throws {
         let json = """
-        {"jsonrpc":"2.0","id":1,"method":"event","result":{"ok":true}}
+        {"jsonrpc":"2.0","id":1,"method":"db.create_issue","params":{"title":"Fix bug"}}
+        """.data(using: .utf8)!
+
+        let message = try decoder.decode(SidecarMessage.self, from: json)
+
+        if case .toolRequest(let request) = message {
+            XCTAssertEqual(request.id, 1)
+            XCTAssertEqual(request.method, "db.create_issue")
+            XCTAssertEqual(request.params, .dictionary(["title": .string("Fix bug")]))
+        } else {
+            XCTFail("Expected .toolRequest, got \(message)")
+        }
+    }
+
+    // MARK: - ReverseRpcRequest decoding
+
+    func testReverseRpcRequestDecodes() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":5,"method":"db.list_issues","params":{"workspace_id":1,"status":"backlog"}}
+        """.data(using: .utf8)!
+
+        let message = try decoder.decode(SidecarMessage.self, from: json)
+
+        if case .toolRequest(let request) = message {
+            XCTAssertEqual(request.id, 5)
+            XCTAssertEqual(request.method, "db.list_issues")
+            XCTAssertNotNil(request.params)
+        } else {
+            XCTFail("Expected .toolRequest, got \(message)")
+        }
+    }
+
+    func testReverseRpcRequestDecodesWithNilParams() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":3,"method":"db.list_epics"}
+        """.data(using: .utf8)!
+
+        let message = try decoder.decode(SidecarMessage.self, from: json)
+
+        if case .toolRequest(let request) = message {
+            XCTAssertEqual(request.id, 3)
+            XCTAssertEqual(request.method, "db.list_epics")
+            XCTAssertNil(request.params)
+        } else {
+            XCTFail("Expected .toolRequest, got \(message)")
+        }
+    }
+
+    // MARK: - ReverseRpcResponse encoding
+
+    func testReverseRpcResponseEncodesSuccess() throws {
+        let response = ReverseRpcResponse(
+            id: 1,
+            result: .dictionary(["id": .number(42), "title": .string("Fix bug")])
+        )
+
+        let data = try JSONEncoder().encode(response)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["jsonrpc"] as? String, "2.0")
+        XCTAssertEqual(json["id"] as? Int, 1)
+        XCTAssertNotNil(json["result"])
+        XCTAssertNil(json["error"])
+    }
+
+    func testReverseRpcResponseEncodesError() throws {
+        let response = ReverseRpcResponse(
+            id: 2,
+            error: RpcError(code: -1, message: "Issue not found")
+        )
+
+        let data = try JSONEncoder().encode(response)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["jsonrpc"] as? String, "2.0")
+        XCTAssertEqual(json["id"] as? Int, 2)
+        XCTAssertNil(json["result"])
+        let err = json["error"] as! [String: Any]
+        XCTAssertEqual(err["code"] as? Int, -1)
+        XCTAssertEqual(err["message"] as? String, "Issue not found")
+    }
+
+    // MARK: - SidecarMessage still decodes responses without method
+
+    func testSidecarMessageStillDecodesResponseWithoutMethod() throws {
+        let json = """
+        {"jsonrpc":"2.0","id":1,"result":{"ok":true}}
         """.data(using: .utf8)!
 
         let message = try decoder.decode(SidecarMessage.self, from: json)
@@ -557,7 +643,7 @@ final class SidecarProtocolTests: XCTestCase {
         if case .response(let resp) = message {
             XCTAssertEqual(resp.id, 1)
         } else {
-            XCTFail("Expected .response when both id and method present, got \(message)")
+            XCTFail("Expected .response, got \(message)")
         }
     }
 
