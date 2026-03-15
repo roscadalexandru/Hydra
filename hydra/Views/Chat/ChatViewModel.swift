@@ -87,8 +87,14 @@ final class ChatViewModel {
     func respondToPermission(approved: Bool) {
         guard let request = pendingPermissionRequest else { return }
         pendingPermissionRequest = nil
-        Task {
-            try? await bridge.respondToPermission(requestId: request.requestId, approved: approved)
+        Task { [weak self] in
+            do {
+                try await self?.bridge.respondToPermission(requestId: request.requestId, approved: approved)
+            } catch {
+                await MainActor.run { [weak self] in
+                    self?.errorMessage = "Failed to send permission response: \(error.localizedDescription)"
+                }
+            }
         }
     }
 

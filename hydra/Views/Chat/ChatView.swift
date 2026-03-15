@@ -29,7 +29,11 @@ struct ChatView: View {
         }
         .sheet(item: Binding(
             get: { viewModel.pendingPermissionRequest },
-            set: { _ in }
+            set: { newValue in
+                if newValue == nil {
+                    viewModel.respondToPermission(approved: false)
+                }
+            }
         )) { request in
             PermissionRequestView(
                 request: request,
