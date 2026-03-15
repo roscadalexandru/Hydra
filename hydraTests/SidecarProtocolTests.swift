@@ -25,7 +25,8 @@ final class SidecarProtocolTests: XCTestCase {
             systemPrompt: nil,
             permissionMode: .default,
             allowedTools: nil,
-            resumeSessionId: nil
+            resumeSessionId: nil,
+            additionalDirectories: nil
         )
         let request = RpcRequest(id: 1, method: "start_session", params: params)
 
@@ -53,7 +54,8 @@ final class SidecarProtocolTests: XCTestCase {
             systemPrompt: "You are helpful",
             permissionMode: .bypassPermissions,
             allowedTools: ["Read", "Write"],
-            resumeSessionId: "prev-session"
+            resumeSessionId: "prev-session",
+            additionalDirectories: nil
         )
 
         let data = try encoder.encode(params)
@@ -76,7 +78,8 @@ final class SidecarProtocolTests: XCTestCase {
             systemPrompt: nil,
             permissionMode: .acceptEdits,
             allowedTools: nil,
-            resumeSessionId: nil
+            resumeSessionId: nil,
+            additionalDirectories: nil
         )
 
         let data = try encoder.encode(params)
@@ -164,7 +167,7 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testSidecarMessageDecodesEvent() throws {
         let json = """
-        {"jsonrpc":"2.0","method":"event","params":{"session_id":"s1","event":{"type":"session_started","sdk_session_id":"sdk-42"}}}
+        {"jsonrpc":"2.0","method":"stream_event","params":{"session_id":"s1","event":{"type":"session_started","sdk_session_id":"sdk-42"}}}
         """.data(using: .utf8)!
 
         let message = try decoder.decode(SidecarMessage.self, from: json)
@@ -185,7 +188,7 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testAgentEventDecodesAssistantMessage() throws {
         let json = """
-        {"type":"assistant_message","content":"Hello world"}
+        {"type":"assistant_message","message":{"content":[{"type":"text","text":"Hello world"}]}}
         """.data(using: .utf8)!
 
         let event = try decoder.decode(AgentEvent.self, from: json)
@@ -393,7 +396,7 @@ final class SidecarProtocolTests: XCTestCase {
 
     func testSidecarMessageEventWithoutParamsThrowsDescriptiveError() {
         let json = """
-        {"jsonrpc":"2.0","method":"event"}
+        {"jsonrpc":"2.0","method":"stream_event"}
         """.data(using: .utf8)!
 
         XCTAssertThrowsError(try decoder.decode(SidecarMessage.self, from: json)) { error in
@@ -693,5 +696,108 @@ final class SidecarProtocolTests: XCTestCase {
         """.data(using: .utf8)!
 
         XCTAssertThrowsError(try decoder.decode(AgentEvent.self, from: json))
+    }
+
+    // MARK: - additionalDirectories in StartSessionParams
+
+    func testStartSessionParamsEncodesAdditionalDirectories() throws {
+        let params = StartSessionParams(
+            sessionId: "s1",
+            prompt: "Hello",
+            workingDirectory: "/project-a",
+            systemPrompt: nil,
+            permissionMode: .default,
+            allowedTools: nil,
+            resumeSessionId: nil,
+            additionalDirectories: ["/project-b", "/project-c"]
+        )
+
+        let data = try encoder.encode(params)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["additional_directories"] as? [String], ["/project-b", "/project-c"])
+    }
+
+    func testStartSessionParamsOmitsNilAdditionalDirectories() throws {
+        let params = StartSessionParams(
+            sessionId: "s1",
+            prompt: "Hello",
+            workingDirectory: "/tmp",
+            systemPrompt: nil,
+            permissionMode: .default,
+            allowedTools: nil,
+            resumeSessionId: nil,
+            additionalDirectories: nil
+        )
+
+        let data = try encoder.encode(params)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertNil(json["additional_directories"])
+    }
+
+    // MARK: - Permission Request event decoding
+
+    func testAgentEventDecodesPermissionRequest() throws {
+        let json = """
+        {"type":"permission_request","request_id":"req-1","tool_name":"Write","description":"Write to /tmp/foo.txt","affected_paths":["/tmp/foo.txt"]}
+        """.data(using: .utf8)!
+
+        let event = try decoder.decode(AgentEvent.self, from: json)
+
+        if case .permissionRequest(let requestId, let toolName, let description, let affectedPaths) = event {
+            XCTAssertEqual(requestId, "req-1")
+            XCTAssertEqual(toolName, "Write")
+            XCTAssertEqual(description, "Write to /tmp/foo.txt")
+            XCTAssertEqual(affectedPaths, ["/tmp/foo.txt"])
+        } else {
+            XCTFail("Expected .permissionRequest, got \(event)")
+        }
+    }
+
+    func testAgentEventDecodesPermissionRequestWithEmptyPaths() throws {
+        let json = """
+        {"type":"permission_request","request_id":"req-2","tool_name":"Bash","description":"Run shell command","affected_paths":[]}
+        """.data(using: .utf8)!
+
+        let event = try decoder.decode(AgentEvent.self, from: json)
+
+        if case .permissionRequest(let requestId, let toolName, _, let affectedPaths) = event {
+            XCTAssertEqual(requestId, "req-2")
+            XCTAssertEqual(toolName, "Bash")
+            XCTAssertEqual(affectedPaths, [])
+        } else {
+            XCTFail("Expected .permissionRequest, got \(event)")
+        }
+    }
+
+    // MARK: - PermissionResponseParams encoding
+
+    func testPermissionResponseParamsEncoding() throws {
+        let params = PermissionResponseParams(
+            sessionId: "s1",
+            requestId: "req-1",
+            approved: true
+        )
+
+        let data = try encoder.encode(params)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["session_id"] as? String, "s1")
+        XCTAssertEqual(json["request_id"] as? String, "req-1")
+        XCTAssertEqual(json["approved"] as? Bool, true)
+    }
+
+    func testPermissionResponseParamsDenied() throws {
+        let params = PermissionResponseParams(
+            sessionId: "s1",
+            requestId: "req-2",
+            approved: false
+        )
+
+        let data = try encoder.encode(params)
+        let json = try JSONSerialization.jsonObject(with: data) as! [String: Any]
+
+        XCTAssertEqual(json["approved"] as? Bool, false)
     }
 }

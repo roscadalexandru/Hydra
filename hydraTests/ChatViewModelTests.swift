@@ -9,7 +9,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Send Creates User Message
 
     func testSendCreatesUserMessage() async throws {
-        let (vm, _, db) = try makeViewModel()
+        let (vm, _, db, workspace) = try makeViewModel()
         vm.inputText = "Hello agent"
         vm.send()
 
@@ -28,14 +28,14 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSendClearsInputText() async throws {
-        let (vm, _, _) = try makeViewModel()
+        let (vm, _, _, _) = try makeViewModel()
         vm.inputText = "Hello"
         vm.send()
         XCTAssertEqual(vm.inputText, "")
     }
 
     func testSendIgnoresEmptyInput() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "   "
         vm.send()
         XCTAssertFalse(mock.startSessionCalled)
@@ -44,7 +44,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Streaming
 
     func testTextDeltaAccumulates() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -57,7 +57,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testAssistantMessagePersisted() async throws {
-        let (vm, mock, db) = try makeViewModel()
+        let (vm, mock, db, workspace) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -84,7 +84,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Tool Events
 
     func testToolUseCreatesChatMessage() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Read a file"
         vm.send()
 
@@ -100,7 +100,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testToolResultCreatesChatMessage() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Read a file"
         vm.send()
 
@@ -115,7 +115,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testToolResultWithError() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Read a file"
         vm.send()
 
@@ -131,7 +131,7 @@ final class ChatViewModelTests: XCTestCase {
     // MARK: - Session Lifecycle
 
     func testSessionStartedUpdatesSdkId() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -143,7 +143,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSessionCompleteUpdatesCost() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -159,7 +159,7 @@ final class ChatViewModelTests: XCTestCase {
     }
 
     func testSessionErrorSetsStatus() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -172,10 +172,132 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertFalse(vm.isStreaming)
     }
 
+    // MARK: - Session Loading
+
+    func testLoadExistingSession() async throws {
+        let (vm, _, db, workspace) = try makeViewModel()
+
+        // Create a session with messages in the DB using the test workspace
+        let session = try await makeSessionWithMessages(
+            db: db, workspaceId: workspace.id!, sdkSessionId: "sdk-prev", title: "Previous Chat",
+            messages: [
+                (role: .user, content: "Hello"),
+                (role: .assistant, content: "Hi there!")
+            ]
+        )
+
+        vm.loadSession(session)
+
+        try await waitUntil { vm.messages.count == 2 }
+
+        XCTAssertEqual(vm.session?.id, session.id)
+        XCTAssertEqual(vm.session?.sdkSessionId, "sdk-prev")
+        XCTAssertEqual(vm.messages.count, 2)
+        XCTAssertEqual(vm.messages[0].role, .user)
+        XCTAssertEqual(vm.messages[1].role, .assistant)
+    }
+
+    func testLoadExistingSessionSetsNextOrderIndex() async throws {
+        let (vm, _, db, workspace) = try makeViewModel()
+
+        let session = try await makeSessionWithMessages(
+            db: db, workspaceId: workspace.id!,
+            messages: [
+                (role: .user, content: "Hello"),
+                (role: .assistant, content: "Hi")
+            ]
+        )
+
+        vm.loadSession(session)
+        try await waitUntil { vm.messages.count == 2 }
+
+        // Send a new message — it should get orderIndex 2
+        vm.inputText = "Follow up"
+        vm.send()
+
+        try await waitUntil { vm.messages.count == 3 }
+        let newMsg = vm.messages.last { $0.role == .user && $0.content == "Follow up" }
+        XCTAssertEqual(newMsg?.orderIndex, 2)
+    }
+
+    // MARK: - Session Resume
+
+    func testSendInExistingSessionPassesResumeSessionId() async throws {
+        let (vm, mock, db, workspace) = try makeViewModel()
+
+        let session = try await makeSessionWithMessages(
+            db: db, workspaceId: workspace.id!, sdkSessionId: "sdk-to-resume",
+            messages: []
+        )
+
+        vm.loadSession(session)
+
+        vm.inputText = "Continue the conversation"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        XCTAssertEqual(mock.lastResumeSessionId, "sdk-to-resume")
+    }
+
+    func testSendInNewSessionHasNilResumeSessionId() async throws {
+        let (vm, mock, _, _) = try makeViewModel()
+        vm.inputText = "Hello"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        XCTAssertNil(mock.lastResumeSessionId)
+    }
+
+    // MARK: - Title Auto-generation
+
+    func testFirstUserMessageUpdatesTitleFromDefault() async throws {
+        let (vm, mock, db, workspace) = try makeViewModel()
+        vm.inputText = "How do I set up CI/CD?"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+
+        // Wait for async title update to persist
+        try await waitUntil { vm.session?.title == "How do I set up CI/CD?" }
+
+        XCTAssertEqual(vm.session?.title, "How do I set up CI/CD?")
+
+        // Verify persisted
+        let sessionId = vm.session?.id
+        try await db.dbWriter.read { dbConn in
+            let fetched = try ChatSession.fetchOne(dbConn, key: sessionId)
+            XCTAssertEqual(fetched?.title, "How do I set up CI/CD?")
+        }
+    }
+
+    func testSecondMessageDoesNotChangeTitle() async throws {
+        let (vm, mock, _, _) = try makeViewModel()
+
+        // First message
+        vm.inputText = "First message"
+        vm.send()
+        try await waitUntil { mock.startSessionCalled }
+        try await waitUntil { vm.session?.title == "First message" }
+
+        mock.emit(.sessionComplete(durationMs: 100, costUsd: 0.01))
+        mock.finish()
+        try await waitUntil { !vm.isStreaming }
+
+        // Reset mock for second send
+        let (_, mock2) = resetMock(vm)
+        vm.inputText = "Second message"
+        vm.send()
+
+        try await waitUntil { mock2.startSessionCalled }
+
+        // Title should still be from first message
+        XCTAssertEqual(vm.session?.title, "First message")
+    }
+
     // MARK: - Cancel
 
     func testCancelCallsBridge() async throws {
-        let (vm, mock, _) = try makeViewModel()
+        let (vm, mock, _, _) = try makeViewModel()
         vm.inputText = "Hi"
         vm.send()
 
@@ -186,9 +308,107 @@ final class ChatViewModelTests: XCTestCase {
         XCTAssertTrue(mock.cancelCalled)
     }
 
+    // MARK: - Permission Request
+
+    func testPermissionRequestSetsPending() async throws {
+        let (vm, mock, _, _) = try makeViewModel()
+        vm.inputText = "Write a file"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        mock.emit(.permissionRequest(
+            requestId: "req-1",
+            toolName: "Write",
+            description: "Write to /tmp/foo.txt",
+            affectedPaths: ["/tmp/foo.txt"]
+        ))
+
+        try await waitUntil { vm.pendingPermissionRequest != nil }
+
+        XCTAssertEqual(vm.pendingPermissionRequest?.requestId, "req-1")
+        XCTAssertEqual(vm.pendingPermissionRequest?.toolName, "Write")
+        XCTAssertEqual(vm.pendingPermissionRequest?.affectedPaths, ["/tmp/foo.txt"])
+    }
+
+    func testRespondToPermissionApproved() async throws {
+        let (vm, mock, _, _) = try makeViewModel()
+        vm.inputText = "Write a file"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        mock.emit(.permissionRequest(
+            requestId: "req-1",
+            toolName: "Write",
+            description: "Write to /tmp/foo.txt",
+            affectedPaths: ["/tmp/foo.txt"]
+        ))
+
+        try await waitUntil { vm.pendingPermissionRequest != nil }
+        vm.respondToPermission(approved: true)
+
+        XCTAssertNil(vm.pendingPermissionRequest)
+        try await waitUntil { mock.lastPermissionResponse != nil }
+        XCTAssertEqual(mock.lastPermissionResponse?.requestId, "req-1")
+        XCTAssertEqual(mock.lastPermissionResponse?.approved, true)
+    }
+
+    func testRespondToPermissionDenied() async throws {
+        let (vm, mock, _, _) = try makeViewModel()
+        vm.inputText = "Write a file"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        mock.emit(.permissionRequest(
+            requestId: "req-2",
+            toolName: "Bash",
+            description: "Run command",
+            affectedPaths: []
+        ))
+
+        try await waitUntil { vm.pendingPermissionRequest != nil }
+        vm.respondToPermission(approved: false)
+
+        XCTAssertNil(vm.pendingPermissionRequest)
+        try await waitUntil { mock.lastPermissionResponse != nil }
+        XCTAssertEqual(mock.lastPermissionResponse?.approved, false)
+    }
+
+    // MARK: - Additional Directories
+
+    func testSendPassesAdditionalDirectories() async throws {
+        let db = try TestDatabase.make()
+        var workspace = Workspace(name: "Test")
+        try await db.dbWriter.write { dbConn in
+            try workspace.insert(dbConn)
+        }
+        let mock = MockChatBridge()
+        let vm = ChatViewModel(
+            database: db,
+            bridge: mock,
+            workspaceId: workspace.id!,
+            workingDirectory: "/project-a",
+            additionalDirectories: ["/project-b", "/project-c"]
+        )
+
+        vm.inputText = "Hello"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        XCTAssertEqual(mock.lastAdditionalDirectories, ["/project-b", "/project-c"])
+    }
+
+    func testSendOmitsEmptyAdditionalDirectories() async throws {
+        let (vm, mock, _, _) = try makeViewModel()
+        vm.inputText = "Hello"
+        vm.send()
+
+        try await waitUntil { mock.startSessionCalled }
+        XCTAssertNil(mock.lastAdditionalDirectories)
+    }
+
     // MARK: - Helpers
 
-    private func makeViewModel() throws -> (ChatViewModel, MockChatBridge, AppDatabase) {
+    private func makeViewModel() throws -> (ChatViewModel, MockChatBridge, AppDatabase, Workspace) {
         let db = try TestDatabase.make()
         var workspace = Workspace(name: "Test")
         try db.dbWriter.write { dbConn in
@@ -201,7 +421,31 @@ final class ChatViewModelTests: XCTestCase {
             workspaceId: workspace.id!,
             workingDirectory: "/tmp"
         )
-        return (vm, mock, db)
+        return (vm, mock, db, workspace)
+    }
+
+    private func makeSessionWithMessages(
+        db: AppDatabase,
+        workspaceId: Int64,
+        sdkSessionId: String? = nil,
+        title: String = "New Chat",
+        messages: [(role: ChatMessage.Role, content: String)]
+    ) async throws -> ChatSession {
+        var session = ChatSession(workspaceId: workspaceId, sdkSessionId: sdkSessionId, title: title)
+        try await db.dbWriter.write { dbConn in
+            try session.insert(dbConn)
+            for (index, msg) in messages.enumerated() {
+                var chatMsg = ChatMessage(chatSessionId: session.id!, orderIndex: index, role: msg.role, content: msg.content)
+                try chatMsg.insert(dbConn)
+            }
+        }
+        return session
+    }
+
+    private func resetMock(_ vm: ChatViewModel) -> (ChatViewModel, MockChatBridge) {
+        let newMock = MockChatBridge()
+        vm.replaceBridge(newMock)
+        return (vm, newMock)
     }
 
     private func waitUntil(
@@ -232,6 +476,9 @@ private final class MockChatBridge: ChatBridgeProtocol {
     private(set) var sendMessageCalled = false
     private(set) var cancelCalled = false
     private(set) var lastPrompt: String?
+    private(set) var lastAdditionalDirectories: [String]?
+    private(set) var lastPermissionResponse: (requestId: String, approved: Bool)?
+    private(set) var lastResumeSessionId: String?
 
     private var continuation: AsyncThrowingStream<AgentEvent, Error>.Continuation?
 
@@ -241,10 +488,13 @@ private final class MockChatBridge: ChatBridgeProtocol {
         systemPrompt: String?,
         permissionMode: PermissionMode,
         allowedTools: [String]?,
-        resumeSessionId: String?
+        resumeSessionId: String?,
+        additionalDirectories: [String]?
     ) -> AsyncThrowingStream<AgentEvent, Error> {
         startSessionCalled = true
         lastPrompt = prompt
+        lastAdditionalDirectories = additionalDirectories
+        lastResumeSessionId = resumeSessionId
         status = .running
 
         let (stream, cont) = AsyncThrowingStream<AgentEvent, Error>.makeStream()
@@ -254,6 +504,10 @@ private final class MockChatBridge: ChatBridgeProtocol {
 
     func sendMessage(_ message: String) async throws {
         sendMessageCalled = true
+    }
+
+    func respondToPermission(requestId: String, approved: Bool) async throws {
+        lastPermissionResponse = (requestId: requestId, approved: approved)
     }
 
     func cancel() async {

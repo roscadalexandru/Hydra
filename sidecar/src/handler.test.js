@@ -319,4 +319,96 @@ describe("handler", () => {
     const shutdownAck = output.find((o) => o.id === 99);
     assert.equal(shutdownAck.result.status, "shutting_down");
   });
+
+  it("permission_response forwards to active session", async () => {
+    const blocking = createBlockingQuery();
+
+    const output = [];
+    const writeLine = (obj) => output.push(obj);
+    const handler = createHandler(blocking.queryFn, writeLine);
+
+    // Start a session
+    handler({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "start_session",
+      params: {
+        sessionId: "hydra-1",
+        prompt: "Write something",
+        workingDirectory: "/tmp",
+        permissionMode: "default",
+      },
+    });
+
+    await new Promise(setImmediate);
+
+    await handler({
+      jsonrpc: "2.0",
+      id: 2,
+      method: "permission_response",
+      params: {
+        sessionId: "hydra-1",
+        requestId: "req-1",
+        approved: true,
+      },
+    });
+
+    const ack = output.find((o) => o.id === 2);
+    assert.ok(ack, "should have ack for permission_response");
+    assert.equal(ack.result.status, "accepted");
+  });
+
+  it("permission_response without active session returns error", async () => {
+    const output = [];
+    const writeLine = (obj) => output.push(obj);
+    const handler = createHandler(fakeQuery([]), writeLine);
+
+    await handler({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "permission_response",
+      params: {
+        sessionId: "hydra-1",
+        requestId: "req-1",
+        approved: true,
+      },
+    });
+
+    const errResp = output.find((o) => o.id === 1);
+    assert.ok(errResp.error, "should return error when no active session");
+  });
+
+  it("start_session passes additionalDirectories to session config", async () => {
+    let capturedConfig = null;
+
+    const queryFn = (opts) => {
+      capturedConfig = opts;
+      const gen = (async function* () {
+        yield makeInitMsg();
+        yield makeResultMsg();
+      })();
+      gen.interrupt = async () => {};
+      gen.close = () => {};
+      return gen;
+    };
+
+    const output = [];
+    const writeLine = (obj) => output.push(obj);
+    const handler = createHandler(queryFn, writeLine);
+
+    await handler({
+      jsonrpc: "2.0",
+      id: 1,
+      method: "start_session",
+      params: {
+        sessionId: "hydra-1",
+        prompt: "Hello",
+        workingDirectory: "/project-a",
+        permissionMode: "default",
+        additionalDirectories: ["/project-b"],
+      },
+    });
+
+    assert.deepStrictEqual(capturedConfig.options.addDirs, ["/project-b"]);
+  });
 });

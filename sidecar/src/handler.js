@@ -29,7 +29,8 @@ export function createHandler(queryFn, writeLine, pmServer) {
         if (!requireParam(cmd, "prompt")) return;
 
         const { sessionId, prompt, workingDirectory, permissionMode,
-          systemPrompt, allowedTools, resumeSessionId } = cmd.params;
+          systemPrompt, allowedTools, resumeSessionId,
+          additionalDirectories } = cmd.params;
 
         if (activeSession) {
           await activeSession.cancel();
@@ -50,7 +51,8 @@ export function createHandler(queryFn, writeLine, pmServer) {
 
         await activeSession.start(
           { sessionId, prompt, workingDirectory, permissionMode,
-            systemPrompt, allowedTools, resumeSessionId },
+            systemPrompt, allowedTools, resumeSessionId,
+            additionalDirectories },
           onEvent,
         );
         break;
@@ -84,6 +86,42 @@ export function createHandler(queryFn, writeLine, pmServer) {
         };
 
         await activeSession.sendMessage(message, onEvent);
+        break;
+      }
+
+      case "permission_response": {
+        if (!requireParam(cmd, "sessionId")) return;
+        if (!requireParam(cmd, "requestId")) return;
+        if (!requireParam(cmd, "approved")) return;
+
+        const { sessionId, requestId, approved } = cmd.params;
+
+        if (!activeSession) {
+          writeLine(
+            formatError(cmd.id, -32602, "No active session"),
+          );
+          return;
+        }
+
+        if (sessionId !== activeSessionId) {
+          writeLine(
+            formatError(cmd.id, -32602, `Session ID mismatch: expected ${activeSessionId}, got ${sessionId}`),
+          );
+          return;
+        }
+
+        const delivered = await activeSession.respondToPermission(requestId, approved);
+
+        if (!delivered) {
+          writeLine(
+            formatError(cmd.id, -32602, "Session query is no longer active"),
+          );
+          return;
+        }
+
+        writeLine(
+          formatResponse(cmd.id, { sessionId, status: "accepted" }),
+        );
         break;
       }
 

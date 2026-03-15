@@ -124,6 +124,12 @@ struct AppDatabase {
             }
         }
 
+        migrator.registerMigration("v4") { db in
+            try db.alter(table: "chat_sessions") { t in
+                t.add(column: "projectId", .integer).references("projects", onDelete: .setNull)
+            }
+        }
+
         return migrator
     }
 }
