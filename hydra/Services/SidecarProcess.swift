@@ -8,6 +8,7 @@ protocol SidecarProcessProtocol: AnyObject, Sendable {
     func start() throws
     @discardableResult
     func send<P: Encodable>(method: String, params: P) throws -> Int
+    func sendResponse(_ response: ReverseRpcResponse) throws
     func terminate()
 }
 
@@ -17,6 +18,7 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
 
     private let nodePath: String
     private let sidecarScript: String
+    private let environment: [String: String]
     private let lock = NSLock()
     private var process: Process?
     private var stdinPipe: Pipe?
@@ -34,9 +36,10 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
         return process?.isRunning ?? false
     }
 
-    init(nodePath: String? = nil, sidecarScript: String) {
+    init(nodePath: String? = nil, sidecarScript: String, environment: [String: String] = [:]) {
         self.nodePath = nodePath ?? SidecarProcess.detectNodePath()
         self.sidecarScript = sidecarScript
+        self.environment = environment
         let (stream, continuation) = AsyncStream<SidecarMessage>.makeStream()
         self.events = stream
         self.eventContinuation = continuation
@@ -72,8 +75,10 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
         // Inherit parent's stderr — avoids 64KB pipe buffer deadlock
         // since we don't need to capture sidecar stderr programmatically
 
-        // Pass Claude Code CLI path to the sidecar via environment
+        // Merge custom environment (e.g. HYDRA_WORKSPACE_ID) and
+        // Claude Code CLI path into the inherited environment
         var env = ProcessInfo.processInfo.environment
+        for (key, value) in environment { env[key] = value }
         if env["CLAUDE_CODE_PATH"] == nil {
             env["CLAUDE_CODE_PATH"] = SidecarProcess.detectClaudePath()
         }
@@ -121,6 +126,20 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
         try handle.write(contentsOf: Data("\n".utf8))
 
         return id
+    }
+
+    func sendResponse(_ response: ReverseRpcResponse) throws {
+        lock.lock()
+        defer { lock.unlock() }
+
+        guard let process = process, process.isRunning, let stdinPipe = stdinPipe else {
+            throw SidecarProcessError.notRunning
+        }
+
+        let data = try encoder.encode(response)
+        let handle = stdinPipe.fileHandleForWriting
+        try handle.write(contentsOf: data)
+        try handle.write(contentsOf: Data("\n".utf8))
     }
 
     func terminate() {
