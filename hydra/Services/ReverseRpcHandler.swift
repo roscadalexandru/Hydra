@@ -62,9 +62,12 @@ struct ReverseRpcHandler {
     private func getIssue(params: AnyCodableValue?) async throws -> AnyCodableValue {
         let dict = try requireDict(params)
         let id = try requireInt64(dict, "id")
+        let workspaceId = try requireInt64(dict, "workspaceId")
 
         let issue = try await database.dbWriter.read { db in
-            try Issue.fetchOne(db, id: id)
+            try Issue
+                .filter(Issue.Columns.id == id && Issue.Columns.workspaceId == workspaceId)
+                .fetchOne(db)
         }
 
         guard let issue else {
@@ -108,9 +111,12 @@ struct ReverseRpcHandler {
     private func updateIssue(params: AnyCodableValue?) async throws -> AnyCodableValue {
         let dict = try requireDict(params)
         let id = try requireInt64(dict, "id")
+        let workspaceId = try requireInt64(dict, "workspaceId")
 
         let updated = try await database.dbWriter.write { db -> Issue? in
-            guard var issue = try Issue.fetchOne(db, id: id) else {
+            guard var issue = try Issue
+                .filter(Issue.Columns.id == id && Issue.Columns.workspaceId == workspaceId)
+                .fetchOne(db) else {
                 return nil
             }
 
@@ -137,9 +143,12 @@ struct ReverseRpcHandler {
     private func deleteIssue(params: AnyCodableValue?) async throws -> AnyCodableValue {
         let dict = try requireDict(params)
         let id = try requireInt64(dict, "id")
+        let workspaceId = try requireInt64(dict, "workspaceId")
 
         let deleted = try await database.dbWriter.write { db -> Bool in
-            guard let issue = try Issue.fetchOne(db, id: id) else {
+            guard let issue = try Issue
+                .filter(Issue.Columns.id == id && Issue.Columns.workspaceId == workspaceId)
+                .fetchOne(db) else {
                 return false
             }
             try issue.delete(db)
@@ -187,9 +196,12 @@ struct ReverseRpcHandler {
     private func updateEpic(params: AnyCodableValue?) async throws -> AnyCodableValue {
         let dict = try requireDict(params)
         let id = try requireInt64(dict, "id")
+        let workspaceId = try requireInt64(dict, "workspaceId")
 
         let updated = try await database.dbWriter.write { db -> Epic? in
-            guard var epic = try Epic.fetchOne(db, id: id) else {
+            guard var epic = try Epic
+                .filter(Epic.Columns.id == id && Epic.Columns.workspaceId == workspaceId)
+                .fetchOne(db) else {
                 return nil
             }
 

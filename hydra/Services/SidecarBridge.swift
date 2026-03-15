@@ -45,7 +45,6 @@ final class SidecarBridge {
         if let database, let workspaceId {
             let handler = ReverseRpcHandler(database: database)
             self.toolRequestHandler = { method, params in
-                // Inject workspaceId into params for operations that need it
                 try await handler.handle(method: method, params: params)
             }
         }

@@ -19,8 +19,10 @@ const handleCommand = createHandler(createQueryFn(), writeLine, pmServer);
 
 const rl = createInterface({ input: process.stdin });
 
-// Protocol assumes the Swift caller sends commands sequentially and waits
-// for each ack before sending the next. No command queue or mutex is used.
+// Bidirectional protocol: Swift sends commands and the sidecar responds, but
+// during command processing the sidecar may also send reverse RPC requests
+// (for PM tools) and Swift writes responses back on stdin. The readline handler
+// routes these responses to reverseRpc before dispatching new commands.
 rl.on("line", async (line) => {
   try {
     // Check if this is a reverse RPC response (has id but no method)

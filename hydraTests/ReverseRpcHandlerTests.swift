@@ -82,6 +82,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
 
         let params = AnyCodableValue.dictionary([
             "id": .number(Double(issue.id!)),
+            "workspaceId": .number(Double(workspaceId)),
         ])
 
         let result = try await handler.handle(method: "db.get_issue", params: params)
@@ -98,6 +99,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
     func testGetIssueReturnsErrorForInvalidId() async throws {
         let params = AnyCodableValue.dictionary([
             "id": .number(999),
+            "workspaceId": .number(Double(workspaceId)),
         ])
 
         do {
@@ -232,6 +234,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
 
         let params = AnyCodableValue.dictionary([
             "id": .number(Double(issue.id!)),
+            "workspaceId": .number(Double(workspaceId)),
             "title": .string("New title"),
             "status": .string("in_progress"),
             "priority": .string("urgent"),
@@ -258,6 +261,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
     func testUpdateIssueReturnsErrorForInvalidId() async throws {
         let params = AnyCodableValue.dictionary([
             "id": .number(999),
+            "workspaceId": .number(Double(workspaceId)),
             "title": .string("Doesn't matter"),
         ])
 
@@ -277,6 +281,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
 
         let params = AnyCodableValue.dictionary([
             "id": .number(Double(issue.id!)),
+            "workspaceId": .number(Double(workspaceId)),
         ])
 
         let result = try await handler.handle(method: "db.delete_issue", params: params)
@@ -297,6 +302,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
     func testDeleteIssueReturnsErrorForInvalidId() async throws {
         let params = AnyCodableValue.dictionary([
             "id": .number(999),
+            "workspaceId": .number(Double(workspaceId)),
         ])
 
         do {
@@ -371,6 +377,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
 
         let params = AnyCodableValue.dictionary([
             "id": .number(Double(epic.id!)),
+            "workspaceId": .number(Double(workspaceId)),
             "title": .string("New title"),
             "description": .string("Updated desc"),
         ])
@@ -388,6 +395,7 @@ final class ReverseRpcHandlerTests: XCTestCase {
     func testUpdateEpicReturnsErrorForInvalidId() async throws {
         let params = AnyCodableValue.dictionary([
             "id": .number(999),
+            "workspaceId": .number(Double(workspaceId)),
             "title": .string("Doesn't matter"),
         ])
 
@@ -396,6 +404,87 @@ final class ReverseRpcHandlerTests: XCTestCase {
             XCTFail("Expected error")
         } catch let error as ReverseRpcHandlerError {
             XCTAssertEqual(error, .notFound("Epic", 999))
+        }
+    }
+
+    // MARK: - Workspace isolation
+
+    func testGetIssueRejectsIssueFromOtherWorkspace() async throws {
+        // Create issue in a different workspace
+        var otherWs = Workspace(name: "Other WS")
+        try await database.dbWriter.write { db in try otherWs.insert(db) }
+        var issue = hydra.Issue(workspaceId: otherWs.id!, title: "Other WS issue")
+        try await database.dbWriter.write { db in try issue.insert(db) }
+
+        let params = AnyCodableValue.dictionary([
+            "id": .number(Double(issue.id!)),
+            "workspaceId": .number(Double(workspaceId)),
+        ])
+
+        do {
+            _ = try await handler.handle(method: "db.get_issue", params: params)
+            XCTFail("Expected error — should not access other workspace's issue")
+        } catch let error as ReverseRpcHandlerError {
+            XCTAssertEqual(error, .notFound("Issue", issue.id!))
+        }
+    }
+
+    func testUpdateIssueRejectsIssueFromOtherWorkspace() async throws {
+        var otherWs = Workspace(name: "Other WS")
+        try await database.dbWriter.write { db in try otherWs.insert(db) }
+        var issue = hydra.Issue(workspaceId: otherWs.id!, title: "Other WS issue")
+        try await database.dbWriter.write { db in try issue.insert(db) }
+
+        let params = AnyCodableValue.dictionary([
+            "id": .number(Double(issue.id!)),
+            "workspaceId": .number(Double(workspaceId)),
+            "title": .string("Hacked"),
+        ])
+
+        do {
+            _ = try await handler.handle(method: "db.update_issue", params: params)
+            XCTFail("Expected error — should not modify other workspace's issue")
+        } catch let error as ReverseRpcHandlerError {
+            XCTAssertEqual(error, .notFound("Issue", issue.id!))
+        }
+    }
+
+    func testDeleteIssueRejectsIssueFromOtherWorkspace() async throws {
+        var otherWs = Workspace(name: "Other WS")
+        try await database.dbWriter.write { db in try otherWs.insert(db) }
+        var issue = hydra.Issue(workspaceId: otherWs.id!, title: "Other WS issue")
+        try await database.dbWriter.write { db in try issue.insert(db) }
+
+        let params = AnyCodableValue.dictionary([
+            "id": .number(Double(issue.id!)),
+            "workspaceId": .number(Double(workspaceId)),
+        ])
+
+        do {
+            _ = try await handler.handle(method: "db.delete_issue", params: params)
+            XCTFail("Expected error — should not delete other workspace's issue")
+        } catch let error as ReverseRpcHandlerError {
+            XCTAssertEqual(error, .notFound("Issue", issue.id!))
+        }
+    }
+
+    func testUpdateEpicRejectsEpicFromOtherWorkspace() async throws {
+        var otherWs = Workspace(name: "Other WS")
+        try await database.dbWriter.write { db in try otherWs.insert(db) }
+        var epic = Epic(workspaceId: otherWs.id!, title: "Other WS epic")
+        try await database.dbWriter.write { db in try epic.insert(db) }
+
+        let params = AnyCodableValue.dictionary([
+            "id": .number(Double(epic.id!)),
+            "workspaceId": .number(Double(workspaceId)),
+            "title": .string("Hacked"),
+        ])
+
+        do {
+            _ = try await handler.handle(method: "db.update_epic", params: params)
+            XCTFail("Expected error — should not modify other workspace's epic")
+        } catch let error as ReverseRpcHandlerError {
+            XCTAssertEqual(error, .notFound("Epic", epic.id!))
         }
     }
 

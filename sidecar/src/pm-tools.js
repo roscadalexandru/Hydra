@@ -37,7 +37,7 @@ export function createPmServer(reverseRpc, workspaceId) {
       id: z.number().describe("Issue ID"),
     },
     async (args) => {
-      const result = await reverseRpc.call("db.get_issue", args);
+      const result = await reverseRpc.call("db.get_issue", { workspaceId, ...args });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -83,7 +83,7 @@ export function createPmServer(reverseRpc, workspaceId) {
         .describe("New assignee type"),
     },
     async (args) => {
-      const result = await reverseRpc.call("db.update_issue", args);
+      const result = await reverseRpc.call("db.update_issue", { workspaceId, ...args });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -95,7 +95,7 @@ export function createPmServer(reverseRpc, workspaceId) {
       id: z.number().describe("Issue ID to delete"),
     },
     async (args) => {
-      const result = await reverseRpc.call("db.delete_issue", args);
+      const result = await reverseRpc.call("db.delete_issue", { workspaceId, ...args });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
@@ -135,7 +135,7 @@ export function createPmServer(reverseRpc, workspaceId) {
       description: z.string().optional().describe("New description"),
     },
     async (args) => {
-      const result = await reverseRpc.call("db.update_epic", args);
+      const result = await reverseRpc.call("db.update_epic", { workspaceId, ...args });
       return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
     },
   );
