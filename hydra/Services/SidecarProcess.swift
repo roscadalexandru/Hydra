@@ -21,16 +21,8 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
     private var process: Process?
     private var stdinPipe: Pipe?
     private var nextRequestId = 1
-    private let encoder: JSONEncoder = {
-        let e = JSONEncoder()
-        e.keyEncodingStrategy = .convertToSnakeCase
-        return e
-    }()
-    private let decoder: JSONDecoder = {
-        let d = JSONDecoder()
-        d.keyDecodingStrategy = .convertFromSnakeCase
-        return d
-    }()
+    private let encoder = JSONEncoder()
+    private let decoder = JSONDecoder()
     private var eventContinuation: AsyncStream<SidecarMessage>.Continuation?
     private let readQueue = DispatchQueue(label: "com.hydra.sidecar.stdout")
 
@@ -79,6 +71,13 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
         proc.standardOutput = stdout
         // Inherit parent's stderr — avoids 64KB pipe buffer deadlock
         // since we don't need to capture sidecar stderr programmatically
+
+        // Pass Claude Code CLI path to the sidecar via environment
+        var env = ProcessInfo.processInfo.environment
+        if env["CLAUDE_CODE_PATH"] == nil {
+            env["CLAUDE_CODE_PATH"] = SidecarProcess.detectClaudePath()
+        }
+        proc.environment = env
 
         self.process = proc
         self.stdinPipe = stdin
@@ -188,7 +187,17 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
     }
 
     private static func detectNodePath() -> String {
-        for path in ["/opt/homebrew/bin/node", "/usr/local/bin/node"] {
+        // Get real home directory (not sandboxed container)
+        let realHome = String(cString: getpwuid(getuid()).pointee.pw_dir)
+        let nvmDir = "\(realHome)/.nvm/versions/node"
+        var candidates = ["/opt/homebrew/bin/node", "/usr/local/bin/node"]
+        // Find nvm node versions (latest first)
+        if let nvmVersions = try? FileManager.default.contentsOfDirectory(atPath: nvmDir) {
+            for version in nvmVersions.sorted().reversed() {
+                candidates.append("\(nvmDir)/\(version)/bin/node")
+            }
+        }
+        for path in candidates {
             if FileManager.default.fileExists(atPath: path) {
                 return path
             }
@@ -209,6 +218,19 @@ final class SidecarProcess: SidecarProcessProtocol, @unchecked Sendable {
             }
         } catch {}
         return "/usr/local/bin/node"
+    }
+
+    private static func detectClaudePath() -> String? {
+        let candidates = [
+            "/opt/homebrew/bin/claude",
+            "/usr/local/bin/claude",
+        ]
+        for path in candidates {
+            if FileManager.default.fileExists(atPath: path) {
+                return path
+            }
+        }
+        return nil
     }
 }
 

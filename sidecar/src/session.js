@@ -37,6 +37,7 @@ export class Session {
         systemPrompt: this.#config?.systemPrompt,
         permissionMode: this.#config?.permissionMode,
         allowedTools: this.#config?.allowedTools,
+        pathToClaudeCodeExecutable: process.env.CLAUDE_CODE_PATH || undefined,
       },
     };
     if (this.#config?.permissionMode === "bypassPermissions") {
